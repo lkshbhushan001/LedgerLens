@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.exceptions import AppException
-from app.routers import health, ingestion, query
+from app.routers import health, ingestion, query, evaluation
 from app.services.embeddings import get_vector_size
 from app.services.vector_store import vector_store
 from app.utils.logging_config import configure_logging
@@ -81,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(ingestion.router)
     app.include_router(query.router)
+    app.include_router(evaluation.router)
 
     return app
 

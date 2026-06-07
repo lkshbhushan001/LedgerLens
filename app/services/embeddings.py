@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from functools import partial
+import collections
+from transformers import AutoTokenizer
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -17,7 +19,7 @@ from sentence_transformers import SentenceTransformer
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
+_sparse_tokenizer = None
 _model: SentenceTransformer | None = None
 
 
@@ -66,3 +68,39 @@ def get_vector_size() -> int:
     """Return the dimensionality of the loaded model."""
     model = _load_model()
     return model.get_sentence_embedding_dimension()
+
+def _load_sparse_tokenizer():
+    """Lazy-load a fast tokenizer for BM25 term frequencies."""
+    global _sparse_tokenizer
+    if _sparse_tokenizer is None:
+        logger.info("Loading sparse tokenizer: bert-base-uncased")
+        # Using a fast HuggingFace tokenizer to map text to integer IDs
+        _sparse_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=True)
+    return _sparse_tokenizer
+
+async def encode_sparse(texts: list[str]) -> list[dict[str, list]]:
+    """Compute term frequencies (TF) for Qdrant BM25 sparse vectors."""
+    if not texts:
+        return []
+        
+    tokenizer = _load_sparse_tokenizer()
+    loop = asyncio.get_running_loop()
+    
+    def _process():
+        results = []
+        for text in texts:
+            # Tokenize without special tokens to get raw word components
+            tokens = tokenizer.encode(text, add_special_tokens=False)
+            counts = collections.Counter(tokens)
+            results.append({
+                "indices": list(counts.keys()),
+                "values": [float(v) for v in counts.values()]
+            })
+        return results
+
+    return await loop.run_in_executor(None, _process)
+
+async def encode_query_sparse(text: str) -> dict[str, list]:
+    """Encode a single query string for sparse retrieval."""
+    results = await encode_sparse([text])
+    return results[0]

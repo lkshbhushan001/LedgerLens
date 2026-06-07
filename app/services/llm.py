@@ -1,0 +1,62 @@
+"""Groq LLM integrations for routing and synthesis."""
+
+import json
+import logging
+from openai import AsyncOpenAI
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Initialize OpenAI client with Groq's endpoint
+groq_client = AsyncOpenAI(
+    api_key=settings.GROQ_API_KEY,
+    base_url="https://api.groq.com/openai/v1"
+)
+
+ROUTER_MODEL = "llama-3.3-70b-versatile"
+SYNTHESIS_MODEL = "llama-3.3-70b-versatile"
+
+async def decompose_query(query: str) -> list[str]:
+    """Router: Break a complex query into atomic sub-queries for parallel vector search."""
+    system_prompt = (
+        "You are an expert financial query router. "
+        "Decompose the following complex user question into 1 to 3 distinct, atomic sub-questions "
+        "optimized for semantic vector search. If the question is already simple, return it as a single item. "
+        "Respond ONLY with a JSON object containing a 'sub_queries' key mapped to a list of strings."
+    )
+    
+    try:
+        response = await groq_client.chat.completions.create(
+            model=ROUTER_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query}
+            ],
+            temperature=0.0,
+            response_format={"type": "json_object"}
+        )
+        content = response.choices[0].message.content
+        data = json.loads(content)
+        queries = data.get("sub_queries", [query])
+        
+        logger.info("Decomposed query '%s' into %d sub-queries", query[:30], len(queries))
+        return queries
+    except Exception as exc:
+        logger.warning("Query decomposition failed, falling back to original query: %s", exc)
+        return [query]
+
+async def generate_answer(query: str, context: str) -> str:
+    """Synthesis: Generate the final answer using the highly compressed context."""
+    prompt = (
+        "You are an expert financial analyst AI. Answer the user's question strictly using the provided context. "
+        "If the context does not contain the answer, explicitly state that you do not have enough information.\n\n"
+        f"Context:\n{context}\n\n"
+        f"Question: {query}"
+    )
+    
+    response = await groq_client.chat.completions.create(
+        model=SYNTHESIS_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.1,
+    )
+    return response.choices[0].message.content

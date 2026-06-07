@@ -1,102 +1,99 @@
-"""Query / RAG router.
+"""Query / RAG router."""
 
-Implements the runtime pipeline:
-  Semantic Cache → Input Guardrail → Decomposition Router →
-  Hybrid Search (RBAC-filtered) → Rerank → Compress → LLM → Output Guardrail
-
-Only the retrieval layer (hybrid search with RBAC) is wired in this scaffold;
-the remaining stages (cache, guardrails, router, reranker, compressor)
-are stubbed with TODO markers for Phase 3/4.
-"""
-
-from __future__ import annotations
-
-import logging
 import time
+import asyncio
+import logging
 from typing import Annotated
-
 from fastapi import APIRouter, Depends, status
-
+from app.services.llm import decompose_query, generate_answer
+from app.services.reranker import rerank_chunks
+from app.services.compressor import compress_context
 from app.core.security import require_user
-from app.models.schemas import (
-    QueryRequest,
-    RAGResponse,
-    RetrievedChunk,
-    UserIdentity,
-)
-from app.services.embeddings import encode_query
+from app.models.schemas import QueryRequest, RAGResponse, RetrievedChunk, UserIdentity
+from app.services.embeddings import encode_query, encode_query_sparse
 from app.services.vector_store import vector_store
+
+# --- Import Cache and Guardrails ---
+from app.services.cache import semantic_cache
+from app.services.guardrails import check_input_guardrails, apply_output_guardrails
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/query", tags=["query"])
 
-
-@router.post(
-    "/",
-    status_code=status.HTTP_200_OK,
-    response_model=RAGResponse,
-    summary="Execute an RBAC-enforced RAG query",
-)
+@router.post("/")
 async def query_rag(
     user: Annotated[UserIdentity, Depends(require_user)],
     request: QueryRequest,
 ) -> RAGResponse:
-    """Run the full RAG pipeline for the authenticated user.
-
-    RBAC enforcement happens at the vector store layer via metadata pre-filter.
-    """
     t0 = time.perf_counter()
 
-    # TODO Phase 4: Semantic cache lookup (GPTCache / Redis vector cache)
-    cache_hit = False
-
-    # TODO Phase 4: Input guardrail — prompt injection / adversarial detection
-
-    # TODO Phase 3: Query decomposition router — split multi-intent queries
-
-    # ---- Dense retrieval (RBAC-enforced) ----
+    # 1. Input Guardrail & Cache Check (From Phase 3)
+    check_input_guardrails(request.question)
     query_vector = await encode_query(request.question)
-    chunks: list[RetrievedChunk] = await vector_store.hybrid_search(
-        user=user,
-        query_vector=query_vector,
-        top_k=request.top_k,
-        filter_document_ids=request.filter_document_ids,
+    cached_answer = await semantic_cache.get(query_vector)
+    
+    if cached_answer:
+        return RAGResponse(
+            answer=apply_output_guardrails(cached_answer),
+            sources=[], latency_ms=round((time.perf_counter() - t0)*1000, 2), cache_hit=True
+        )
+
+    # 2. Query Decomposition Router
+    sub_queries = await decompose_query(request.question)
+    
+    # 3. Parallel Hybrid Search for all sub-queries
+    pooled_chunks = {}
+    
+    async def _search_sub_query(sq: str):
+        sq_dense = await encode_query(sq)
+        sq_sparse = await encode_query_sparse(sq)
+        # Fetch a wider net (top_k * 2) per sub-query for the reranker
+        return await vector_store.hybrid_search(
+            user=user, query_vector=sq_dense, query_sparse=sq_sparse, 
+            top_k=request.top_k * 2, filter_document_ids=request.filter_document_ids
+        )
+
+    search_tasks = [_search_sub_query(sq) for sq in sub_queries]
+    search_results_lists = await asyncio.gather(*search_tasks)
+
+    # Deduplicate chunks based on chunk_id
+    for results in search_results_lists:
+        for chunk in results:
+            if chunk.chunk_id not in pooled_chunks:
+                pooled_chunks[chunk.chunk_id] = chunk
+
+    unique_chunks = list(pooled_chunks.values())
+
+    # 4. Cross-Encoder Reranking (Against original question)
+    reranked_chunks = await rerank_chunks(
+        query=request.question,
+        chunks=unique_chunks,
+        top_k=request.top_k
     )
 
-    # TODO Phase 3: Sparse keyword search (BM25) + score fusion
-    # Score = α * score_dense + (1 − α) * score_sparse
-
-    # TODO Phase 4: Cross-encoder reranking (BGE-Reranker)
-
-    # TODO Phase 4: Contextual compression (LLMLingua)
-
-    # ---- Synthesis (placeholder) ----
-    if chunks:
-        context = "\n\n".join(f"[{i+1}] {c.text}" for i, c in enumerate(chunks))
-        answer = f"[Synthesized answer based on {len(chunks)} retrieved chunks]\n\n{context[:500]}..."
+    # 5. Synthesis & Compression
+    if reranked_chunks:
+        raw_texts = [c.text for c in reranked_chunks]
+        
+        # Compress the context to maximize density
+        compressed_context = await compress_context(request.question, raw_texts)
+        
+        # Generate answer using Groq LLM
+        answer = await generate_answer(request.question, compressed_context)
     else:
         answer = "No relevant documents found for your permission level."
 
-    # TODO Phase 4: Output guardrail — PII / restricted metric filtering
-    # TODO Phase 5: Evaluation harness (Ragas) — faithfulness, context relevance
+    # 6. Output Guardrail & Cache (From Phase 3)
+    safe_answer = apply_output_guardrails(answer)
+    if reranked_chunks:
+        await semantic_cache.set(query_vector, safe_answer)
 
     latency_ms = (time.perf_counter() - t0) * 1000
 
-    logger.info(
-        "Query processed",
-        extra={
-            "user_id": user.user_id,
-            "question": request.question[:80],
-            "chunks_retrieved": len(chunks),
-            "latency_ms": round(latency_ms, 2),
-            "cache_hit": cache_hit,
-        },
-    )
-
     return RAGResponse(
-        answer=answer,
-        sources=chunks,
+        answer=safe_answer,
+        sources=reranked_chunks,
         latency_ms=round(latency_ms, 2),
-        cache_hit=cache_hit,
+        cache_hit=False,
         guardrail_passed=True,
     )

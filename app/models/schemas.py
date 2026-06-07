@@ -167,3 +167,15 @@ class EvaluationResult(BaseModel):
     answer_relevance: float  # Match to User Intent
     overall_score: float = Field(..., ge=0.0, le=1.0)
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ChunkPayload(BaseModel):
+    chunk_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    text: str = Field(..., min_length=1)
+    embedding: list[float] | None = None
+    sparse_embedding: dict[str, list] | None = None  # Add this field
+    token_count: int | None = None
+    chunk_type: ChunkType = ChunkType.TEXT
+    rbac: RBACMetadata
+    page_number: int | None = None
+    image_description: str | None = None
