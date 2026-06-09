@@ -6,8 +6,11 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status, BackgroundTasks
-
+from fastapi import APIRouter, Depends, BackgroundTasks, File, Form, UploadFile, status, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from app.db.database import get_db
+from app.db.models import DocumentDBRecord
 from app.core.security import require_user
 from app.models.schemas import (
     DocumentIngestRequest,
@@ -36,6 +39,7 @@ async def upload_document(
     allowed_roles: Annotated[str, Form(...)],  # comma-separated
     fund_family: Annotated[str | None, Form(None)] = None,
     report_period: Annotated[str | None, Form(None)] = None,
+    db: AsyncSession = Depends(get_db),
 ) -> DocumentRecord:
     """Accept a raw document and enqueue it for async ETL processing."""
     
@@ -59,7 +63,7 @@ async def upload_document(
         uploaded_by=user.user_id,
         doc_type=meta.doc_type,
         fund_family=meta.fund_family,
-        report_period=meta.report_period,
+        report_period=meta.report_period
     )
 
     logger.info(
@@ -68,6 +72,14 @@ async def upload_document(
         user.user_id,
         meta.allowed_roles,
     )
+
+    doc_record = DocumentDBRecord(
+        document_id=document_id,
+        source_filename=meta.source_filename,
+        status="processing"
+    )
+    db.add(doc_record)
+    await db.commit()
 
     # Read bytes immediately before the FastAPI file context closes
     file_bytes = await file.read()
@@ -87,3 +99,17 @@ async def upload_document(
         rbac=rbac,
         processing_status="processing",
     )
+
+@router.get("/{document_id}/status")
+async def get_document_status(
+    document_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Allow users to poll for document ingestion status."""
+    result = await db.execute(select(DocumentDBRecord).where(DocumentDBRecord.document_id == document_id))
+    record = result.scalars().first()
+    
+    if not record:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    return {"document_id": record.document_id, "status": record.status}

@@ -46,78 +46,8 @@ class VectorStore:
             api_key=settings.QDRANT_API_KEY or None,
         )
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
-    async def ensure_collection(self, vector_size: int) -> None:
-        """Create collection if missing; ensure payload indices exist."""
-        try:
-            exists = await self.client.collection_exists(COLLECTION_NAME)
-        except Exception as exc:
-            raise VectorStoreError(f"Cannot reach Qdrant: {exc}") from exc
-
-        if not exists:
-            logger.info("Creating collection %s (dim=%d)", COLLECTION_NAME, vector_size)
-            await self.client.create_collection(
-                collection_name=COLLECTION_NAME,
-                vectors_config=models.VectorParams(
-                    size=vector_size,
-                    distance=models.Distance.COSINE,
-                ),
-                optimizers_config=models.OptimizersConfigDiff(
-                    indexing_threshold=1000,
-                ),
-            )
-            # Create payload indices for fast RBAC filtering
-            for idx in _PAYLOAD_INDICES:
-                await self.client.create_payload_index(
-                    collection_name=COLLECTION_NAME,
-                    field_name=idx.field,
-                    field_schema=idx.field_index_type,
-                    wait=True,
-                )
-
     async def close(self) -> None:
         await self.client.close()
-
-    # ------------------------------------------------------------------
-    # Write
-    # ------------------------------------------------------------------
-
-    async def upsert_chunks(self, chunks: list[ChunkPayload]) -> None:
-        """Insert or update chunks with their embeddings."""
-        if not chunks:
-            return
-
-        points = [
-            models.PointStruct(
-                id=ch.chunk_id,
-                vector=ch.embedding,  # type: ignore[arg-type]
-                payload={
-                    "text": ch.text,
-                    "chunk_type": ch.chunk_type.value,
-                    "token_count": ch.token_count,
-                    "page_number": ch.page_number,
-                    "image_description": ch.image_description,
-                    "rbac": ch.rbac.model_dump(mode="json"),
-                },
-            )
-            for ch in chunks
-            if ch.embedding is not None
-        ]
-
-        if not points:
-            raise VectorStoreError("No chunks with embeddings to upsert")
-
-        try:
-            await self.client.upsert(collection_name=COLLECTION_NAME, points=points)
-        except Exception as exc:
-            raise VectorStoreError(f"Upsert failed: {exc}") from exc
-
-    # ------------------------------------------------------------------
-    # Read — RBAC-enforced hybrid search
-    # ------------------------------------------------------------------
 
     async def hybrid_search(
         self,

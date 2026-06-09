@@ -14,7 +14,8 @@ groq_client = AsyncOpenAI(
 )
 
 ROUTER_MODEL = "llama-3.3-70b-versatile"
-SYNTHESIS_MODEL = "llama-3.3-70b-versatile"
+SYNTHESIS_MODEL = "llama-3.2-90b-vision-preview" 
+VISION_MODEL = "llama-3.2-90b-vision-preview"
 
 async def decompose_query(query: str) -> list[str]:
     """Router: Break a complex query into atomic sub-queries for parallel vector search."""
@@ -60,3 +61,36 @@ async def generate_answer(query: str, context: str) -> str:
         temperature=0.1,
     )
     return response.choices[0].message.content
+
+async def generate_image_description(base64_image: str) -> str:
+    """Vision: Analyze an extracted image chart/graph and return a dense description."""
+    prompt = (
+        "You are an expert financial data analyst. Analyze this image (which may be a chart, "
+        "graph, or table). Provide a dense, highly detailed text description summarizing the axes, "
+        "trends, key data points, and any notable anomalies. Do not include introductory fluff."
+    )
+    
+    try:
+        response = await groq_client.chat.completions.create(
+            model=VISION_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            temperature=0.1,
+            max_tokens=500,
+        )
+        return response.choices[0].message.content
+    except Exception as exc:
+        logger.error("Vision LLM failed to generate description: %s", exc)
+        return "Image description unavailable."

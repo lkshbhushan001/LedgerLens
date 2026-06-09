@@ -44,7 +44,7 @@ dependencies = [
     "datasets>=3.1.0",
 
     # Async & caching
-    "aioredis>=2.0.0",
+    "redis>=5.0.0",
     "tenacity>=9.0.0",
 
     # Observability

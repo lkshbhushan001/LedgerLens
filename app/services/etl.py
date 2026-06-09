@@ -6,9 +6,11 @@ import os
 import tempfile
 import uuid
 from typing import List
-
+from app.services.llm import generate_image_description
 from llama_parse import LlamaParse
-
+from sqlalchemy import update
+from app.db.database import AsyncSessionLocal
+from app.db.models import DocumentDBRecord
 from app.core.config import settings
 from app.models.schemas import ChunkPayload, ChunkType, RBACMetadata
 from app.services.embeddings import encode, encode_sparse
@@ -54,30 +56,51 @@ async def process_document_pipeline(
         # Combine parsed nodes into full text
         full_text = "\n\n".join([doc.text for doc in parsed_docs])
 
-        # 3. Chunking
-        # A simple paragraph-aware chunker that respects markdown structures
-        raw_chunks = _basic_markdown_chunker(full_text, max_chars=1500)
-        
+        # 3. Chunking & Vision Processing
         chunks: List[ChunkPayload] = []
-        for text in raw_chunks:
-            text = text.strip()
-            if not text:
-                continue
-                
-            # Classify chunk type to assist the decomposition router later
-            is_table = "|" in text and "-|-" in text
-            chunk_type = ChunkType.TABLE if is_table else ChunkType.TEXT
+        
+        for doc in parsed_docs:
+            # Check if LlamaParse extracted images for this node/page
+            images = getattr(doc, 'images', []) 
             
-            chunks.append(
-                ChunkPayload(
-                    chunk_id=str(uuid.uuid4()),
-                    text=text,
-                    chunk_type=chunk_type,
-                    rbac=rbac,
-                    # Fast approximate token count (roughly 4 chars per token)
-                    token_count=len(text) // 4,
+            # 3A. Process Text
+            raw_chunks = _basic_markdown_chunker(doc.text, max_chars=1500)
+            for text in raw_chunks:
+                text = text.strip()
+                if not text:
+                    continue
+                    
+                is_table = "|" in text and "-|-" in text
+                
+                chunks.append(
+                    ChunkPayload(
+                        chunk_id=str(uuid.uuid4()),
+                        text=text,
+                        chunk_type=ChunkType.TABLE if is_table else ChunkType.TEXT,
+                        rbac=rbac,
+                        token_count=len(text) // 4,
+                    )
                 )
-            )
+            
+            # 3B. Process Images
+            for img_dict in images:
+                # Assuming LlamaParse returns base64 in a dict, adjust key based on your LlamaCloud tier
+                base64_data = img_dict.get('base64') 
+                if base64_data:
+                    logger.info("Image detected. Routing to Vision LLM for description.")
+                    # Call the vision model to generate the dense description
+                    img_desc = await generate_image_description(base64_data)
+                    
+                    chunks.append(
+                        ChunkPayload(
+                            chunk_id=str(uuid.uuid4()),
+                            text=f"Image Description: {img_desc}", # Store description as the searchable text
+                            chunk_type=ChunkType.IMAGE_DESCRIPTION,
+                            image_description=img_desc, # Inject directly into metadata as required
+                            rbac=rbac,
+                            token_count=len(img_desc) // 4,
+                        )
+                    )
 
         if not chunks:
             logger.warning("No valid chunks generated for %s", filename)
@@ -102,12 +125,17 @@ async def process_document_pipeline(
         logger.info("Upserting %d chunks to vector store", len(chunks))
         await vector_store.upsert_chunks(chunks)
         
+        logger.info("ETL pipeline successfully completed for document %s", rbac.document_id)        
+        
+        # Mark as completed
+        await update_doc_status(rbac.document_id, "completed")
         logger.info("ETL pipeline successfully completed for document %s", rbac.document_id)
 
     except Exception as exc:
-        logger.error("ETL pipeline failed for document %s: %s", rbac.document_id, exc, exc_info=True)
-        # TODO Phase 2: Update document status to "failed" in a relational database
-        raise
+        logger.error("ETL pipeline failed for document %s", rbac.document_id)
+        # Mark as failed
+        await update_doc_status(rbac.document_id, "failed")
+        raise    
     finally:
         # Ensure temporary file is always cleaned up
         if os.path.exists(tmp_path):
@@ -134,3 +162,12 @@ def _basic_markdown_chunker(text: str, max_chars: int = 1500) -> List[str]:
         chunks.append(current_chunk)
         
     return chunks
+
+async def update_doc_status(document_id: str, doc_status: str):
+    async with AsyncSessionLocal() as session:
+        stmt = update(DocumentDBRecord).where(DocumentDBRecord.document_id == document_id).values(status=doc_status)
+        await session.execute(stmt)
+        await session.commit()
+
+# In your process_document_pipeline function:
+    
