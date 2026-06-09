@@ -1,0 +1,11 @@
+Date,Description,Category,Amount,Balance
+2024-01-01,Opening Balance,Initial,0,100000
+2024-01-05,Revenue from Sales,Income,5000,105000
+2024-01-10,Rent Payment,Expense,-2000,103000
+2024-01-15,Salary Payments,Expense,-8000,95000
+2024-01-20,Equipment Purchase,Capital,-3000,92000
+2024-01-25,Interest Received,Income,500,92500
+2024-02-01,Monthly Utilities,Expense,-1500,91000
+2024-02-05,Contract Completion,Income,12000,103000
+2024-02-10,Office Supplies,Expense,-800,102200
+2024-02-15,Quarterly Review,Reference,0,102200

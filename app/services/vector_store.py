@@ -21,19 +21,10 @@ logger = logging.getLogger(__name__)
 COLLECTION_NAME: str = settings.QDRANT_COLLECTION
 
 # Pre-defined payload indices for RBAC enforcement performance
-_PAYLOAD_INDICES: list[models.PayloadIndexSchema] = [
-    models.PayloadIndexSchema(
-        field="rbac.allowed_roles",
-        field_index_type="keyword",
-    ),
-    models.PayloadIndexSchema(
-        field="rbac.document_id",
-        field_index_type="keyword",
-    ),
-    models.PayloadIndexSchema(
-        field="rbac.fund_family",
-        field_index_type="keyword",
-    ),
+_PAYLOAD_INDICES: list[tuple[str, models.KeywordIndexParams]] = [
+    ("rbac.allowed_roles", models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD)),
+    ("rbac.document_id", models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD)),
+    ("rbac.fund_family", models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD)),
 ]
 
 
@@ -97,11 +88,11 @@ class VectorStore:
                 ),
             )
             # Create payload indices for fast RBAC filtering
-            for idx in _PAYLOAD_INDICES:
+            for field_name, index_params in _PAYLOAD_INDICES:
                 await self.client.create_payload_index(
                     collection_name=COLLECTION_NAME,
-                    field_name=idx.field,
-                    field_schema=idx.field_index_type,
+                    field_name=field_name,
+                    field_schema=index_params,
                     wait=True,
                 )
 

@@ -1,0 +1,57 @@
+{
+  "company": {
+    "name": "Global Finance Ltd",
+    "industry": "Financial Services",
+    "reporting_date": "2024-03-31"
+  },
+  "accounts": [
+    {
+      "account_id": "ACC001",
+      "account_name": "Checking Account",
+      "account_type": "Asset",
+      "balance": 250000,
+      "currency": "USD"
+    },
+    {
+      "account_id": "ACC002",
+      "account_name": "Savings Account",
+      "account_type": "Asset",
+      "balance": 500000,
+      "currency": "USD"
+    },
+    {
+      "account_id": "ACC003",
+      "account_name": "Accounts Receivable",
+      "account_type": "Asset",
+      "balance": 350000,
+      "currency": "USD"
+    },
+    {
+      "account_id": "ACC004",
+      "account_name": "Accounts Payable",
+      "account_type": "Liability",
+      "balance": -200000,
+      "currency": "USD"
+    }
+  ],
+  "transactions": [
+    {
+      "date": "2024-01-10",
+      "description": "Client Invoice Payment",
+      "amount": 50000,
+      "account_id": "ACC001"
+    },
+    {
+      "date": "2024-01-15",
+      "description": "Vendor Payment",
+      "amount": -30000,
+      "account_id": "ACC001"
+    },
+    {
+      "date": "2024-02-01",
+      "description": "Monthly Revenue",
+      "amount": 75000,
+      "account_id": "ACC001"
+    }
+  ]
+}

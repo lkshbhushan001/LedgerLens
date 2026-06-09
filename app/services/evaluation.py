@@ -6,14 +6,6 @@ from typing import Any
 from datasets import Dataset
 from langchain_openai import ChatOpenAI
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from ragas import evaluate
-from ragas.llms import LangchainLLMWrapper
-from ragas.embeddings import LangchainEmbeddingsWrapper
-from ragas.metrics import (
-    answer_relevancy,
-    context_precision,
-    faithfulness,
-)
 
 from app.core.config import settings
 from app.models.schemas import EvaluationResult
@@ -72,6 +64,16 @@ async def run_evaluation_batch(
     # Initialize custom LLM and Embeddings
     evaluator_llm = _get_evaluator_llm()
     evaluator_embeddings = _get_evaluator_embeddings()
+
+    # Lazy import Ragas to avoid startup dependency unless evaluation is used
+    from ragas import evaluate
+    from ragas.llms import LangchainLLMWrapper
+    from ragas.embeddings import LangchainEmbeddingsWrapper
+    from ragas.metrics import (
+        answer_relevancy,
+        context_precision,
+        faithfulness,
+    )
 
     # Apply wrappers to the metrics
     metrics = [faithfulness, answer_relevancy, context_precision]

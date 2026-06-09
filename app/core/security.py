@@ -41,13 +41,26 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def create_access_token(
-    user_id: str,
-    email: str,
-    permission_groups: list[str],
+    user_id: str | UserIdentity,
+    email: str | None = None,
+    permission_groups: list[str] | None = None,
     is_admin: bool = False,
     expires_delta: timedelta | None = None,
 ) -> str:
-    """Encode identity claims into a JWT."""
+    """Encode identity claims into a JWT.
+
+    Supports either passing explicit identity fields or a UserIdentity object.
+    """
+    if isinstance(user_id, UserIdentity):
+        user = user_id
+        email = user.email
+        permission_groups = user.permission_groups
+        is_admin = user.is_admin
+        user_id = user.user_id
+
+    if not email or permission_groups is None:
+        raise ValueError("email and permission_groups are required to create a token")
+
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,

@@ -122,6 +122,7 @@ async def process_document_pipeline(
 
         # 3. Chunking & Vision Processing
         chunks: List[ChunkPayload] = []
+        tokenizer = _get_gpt2_tokenizer()
         
         for doc in parsed_docs:
             images = getattr(doc, 'images', []) 
@@ -135,14 +136,13 @@ async def process_document_pipeline(
                     
                 is_table = "|" in text and "-|-" in text
                 
-tokenizer = _get_gpt2_tokenizer()
-                    chunks.append(
-                        ChunkPayload(
-                            chunk_id=str(uuid.uuid4()),
-                            text=text,
-                            chunk_type=ChunkType.TABLE if is_table else ChunkType.TEXT,
-                            rbac=rbac,
-                            token_count=len(tokenizer.encode(text, add_special_tokens=False)),
+                chunks.append(
+                    ChunkPayload(
+                        chunk_id=str(uuid.uuid4()),
+                        text=text,
+                        chunk_type=ChunkType.TABLE if is_table else ChunkType.TEXT,
+                        rbac=rbac,
+                        token_count=len(tokenizer.encode(text, add_special_tokens=False)),
                     )
                 )
             

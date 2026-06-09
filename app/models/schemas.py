@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -64,9 +64,11 @@ class RBACMetadata(BaseModel):
 class UserIdentity(BaseModel):
     """Resolved user after JWT validation."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     user_id: str
     email: str
-    permission_groups: list[str]
+    permission_groups: list[str] = Field(alias="roles")
     is_admin: bool = False
 
     def can_access(self, metadata: RBACMetadata) -> bool:

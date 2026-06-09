@@ -40,11 +40,23 @@ async def lifespan(app: FastAPI):
     vector_dim = get_vector_size()
     logger.info("Embedding model vector size: %d", vector_dim)
 
-    await vector_store.ensure_collection(vector_size=vector_dim)
-    logger.info("Vector store ready: %s", settings.QDRANT_COLLECTION)
+    try:
+        await vector_store.ensure_collection(vector_size=vector_dim)
+        logger.info("Vector store ready: %s", settings.QDRANT_COLLECTION)
+    except Exception as exc:
+        logger.warning(
+            "Vector store initialization failed; continuing with degraded startup: %s",
+            exc,
+        )
 
-    await semantic_cache.initialize_index(vector_dim=vector_dim)
-    logger.info("Semantic cache ready")
+    try:
+        await semantic_cache.initialize_index(vector_dim=vector_dim)
+        logger.info("Semantic cache ready")
+    except Exception as exc:
+        logger.warning(
+            "Semantic cache initialization failed; continuing with degraded startup: %s",
+            exc,
+        )
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

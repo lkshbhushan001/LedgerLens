@@ -5,7 +5,7 @@ import uuid
 import numpy as np
 import redis.asyncio as redis
 from redis.commands.search.field import VectorField, TextField, TagField
-from redis.commands.search.indexDefinition import IndexDefinition, IndexType
+from redis.commands.search.index_definition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 from redis.exceptions import ResponseError
 from tenacity import retry, stop_after_attempt, wait_exponential

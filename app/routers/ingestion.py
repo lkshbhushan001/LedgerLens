@@ -37,8 +37,8 @@ async def upload_document(
     file: Annotated[UploadFile, File(...)],
     doc_type: Annotated[DocumentType, Form(...)],
     allowed_roles: Annotated[str, Form(...)],  # comma-separated
-    fund_family: Annotated[str | None, Form(None)] = None,
-    report_period: Annotated[str | None, Form(None)] = None,
+    fund_family: str | None = Form(default=None),
+    report_period: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentRecord:
     """Accept a raw document and enqueue it for async ETL processing."""

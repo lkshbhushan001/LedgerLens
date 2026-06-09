@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FinancialReport>
+    <Metadata>
+        <CompanyName>TechCorp Inc</CompanyName>
+        <ReportDate>2024-01-15</ReportDate>
+        <Currency>USD</Currency>
+    </Metadata>
+    <IncomeStatement>
+        <Revenue>
+            <ProductSales>3500000</ProductSales>
+            <ServiceSales>1200000</ServiceSales>
+            <Total>4700000</Total>
+        </Revenue>
+        <Expenses>
+            <COGS>2100000</COGS>
+            <OperatingExpenses>1500000</OperatingExpenses>
+            <Total>3600000</Total>
+        </Expenses>
+        <NetIncome>1100000</NetIncome>
+    </IncomeStatement>
+    <BalanceSheet>
+        <Assets>
+            <Current>5000000</Current>
+            <Fixed>3000000</Fixed>
+            <Total>8000000</Total>
+        </Assets>
+        <Liabilities>
+            <Current>2000000</Current>
+            <LongTerm>1500000</LongTerm>
+            <Total>3500000</Total>
+        </Liabilities>
+        <Equity>4500000</Equity>
+    </BalanceSheet>
+</FinancialReport>
