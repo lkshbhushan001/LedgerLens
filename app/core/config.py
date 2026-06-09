@@ -38,7 +38,9 @@ class Settings(BaseSettings):
 
     # --- LLM ---
     OPENAI_API_KEY: str
-    LLM_MODEL: str = "gpt-4o-mini"
+    ROUTER_MODEL: str = "llama-3.3-70b-versatile"
+    SYNTHESIS_MODEL: str = "llama-3.2-90b-vision-preview"
+    VISION_MODEL: str = "llama-3.2-90b-vision-preview"
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 2048
 

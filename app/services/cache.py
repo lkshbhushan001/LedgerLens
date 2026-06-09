@@ -3,7 +3,10 @@ import uuid
 
 import numpy as np
 import redis.asyncio as redis
+from redis.commands.search.field import VectorField, TextField
+from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
+from redis.exceptions import ResponseError
 
 from app.core.config import settings
 
@@ -14,6 +17,32 @@ class SemanticCache:
         self.client = redis.from_url(settings.REDIS_URL, decode_responses=False)
         self.index_name = "idx:semantic_cache"
         self.similarity_threshold = 0.95  # Cosine similarity threshold for a "hit"
+
+    async def initialize_index(self, vector_dim: int) -> None:
+        """Create the semantic cache vector index if it does not exist."""
+        try:
+            # Check if index exists
+            await self.client.ft(self.index_name).info()
+            logger.info("Semantic cache index '%s' already exists.", self.index_name)
+        except ResponseError:
+            # If not, create it
+            logger.info("Creating semantic cache index '%s' with dim %d...", self.index_name, vector_dim)
+            schema = (
+                VectorField(
+                    "embedding",
+                    "HNSW",  # Hierarchical Navigable Small World algorithm for fast KNN
+                    {
+                        "TYPE": "FLOAT32",
+                        "DIM": vector_dim,
+                        "DISTANCE_METRIC": "COSINE",
+                    }
+                ),
+                TextField("answer"),
+            )
+            # We prefix the cached keys with 'cache:'
+            definition = IndexDefinition(prefix=["cache:"], index_type=IndexType.HASH)
+            await self.client.ft(self.index_name).create_index(fields=schema, definition=definition)
+            logger.info("Semantic cache index created successfully.")
 
     async def get(self, query_vector: list[float]) -> str | None:
         """Retrieve the semantically closest cached answer using Redis Vector Search."""

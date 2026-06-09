@@ -9,8 +9,7 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "python-multipart>=0.0.12",
 
-    # Security
-    "python-jose[cryptography]>=3.3.0",
+    # Security    
     "passlib[bcrypt]>=1.7.4",
     "PyJWT>=2.10.0",
 

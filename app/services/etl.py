@@ -6,15 +6,17 @@ import os
 import tempfile
 import uuid
 from typing import List
-from app.services.llm import generate_image_description
+
 from llama_parse import LlamaParse
 from sqlalchemy import update
+
 from app.db.database import AsyncSessionLocal
 from app.db.models import DocumentDBRecord
 from app.core.config import settings
 from app.models.schemas import ChunkPayload, ChunkType, RBACMetadata
 from app.services.embeddings import encode, encode_sparse
 from app.services.vector_store import vector_store
+from app.services.llm import generate_image_description
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +34,19 @@ async def process_document_pipeline(
     """
     logger.info("Starting ETL pipeline for document: %s", rbac.document_id)
 
-    # 1. Save bytes to a temporary file for LlamaParse
     ext = os.path.splitext(filename)[1]
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-        tmp.write(file_bytes)
-        tmp_path = tmp.name
-
+    
+    # 1. Safely acquire a low-level OS file descriptor
+    fd, tmp_path = tempfile.mkstemp(suffix=ext)
+    
     try:
+        # Write bytes and force the OS to flush buffers to disk
+        with os.fdopen(fd, 'wb') as f:
+            f.write(file_bytes)
+            f.flush()
+            os.fsync(f.fileno()) 
+
         # 2. Layout-aware Parsing
-        # Result type "markdown" ensures financial tables are preserved with standard md syntax
         parser = LlamaParse(
             api_key=settings.LLAMA_CLOUD_API_KEY,
             result_type="markdown",
@@ -51,16 +57,13 @@ async def process_document_pipeline(
         
         if not parsed_docs:
             logger.warning("No content could be extracted from %s", filename)
+            await update_doc_status(rbac.document_id, "failed")
             return
-
-        # Combine parsed nodes into full text
-        full_text = "\n\n".join([doc.text for doc in parsed_docs])
 
         # 3. Chunking & Vision Processing
         chunks: List[ChunkPayload] = []
         
         for doc in parsed_docs:
-            # Check if LlamaParse extracted images for this node/page
             images = getattr(doc, 'images', []) 
             
             # 3A. Process Text
@@ -84,19 +87,17 @@ async def process_document_pipeline(
             
             # 3B. Process Images
             for img_dict in images:
-                # Assuming LlamaParse returns base64 in a dict, adjust key based on your LlamaCloud tier
                 base64_data = img_dict.get('base64') 
                 if base64_data:
                     logger.info("Image detected. Routing to Vision LLM for description.")
-                    # Call the vision model to generate the dense description
                     img_desc = await generate_image_description(base64_data)
                     
                     chunks.append(
                         ChunkPayload(
                             chunk_id=str(uuid.uuid4()),
-                            text=f"Image Description: {img_desc}", # Store description as the searchable text
+                            text=f"Image Description: {img_desc}",
                             chunk_type=ChunkType.IMAGE_DESCRIPTION,
-                            image_description=img_desc, # Inject directly into metadata as required
+                            image_description=img_desc,
                             rbac=rbac,
                             token_count=len(img_desc) // 4,
                         )
@@ -104,19 +105,18 @@ async def process_document_pipeline(
 
         if not chunks:
             logger.warning("No valid chunks generated for %s", filename)
+            await update_doc_status(rbac.document_id, "failed")
             return
 
         # 4. Embed Chunks
         logger.info("Encoding %d chunks for document %s", len(chunks), rbac.document_id)
         texts_to_embed = [c.text for c in chunks]
-        
-        # Await both dense and sparse encodings concurrently for better performance        
+              
         embeddings, sparse_embeddings = await asyncio.gather(
             encode(texts_to_embed),
             encode_sparse(texts_to_embed)
         )
         
-        # Attach both vectors to the chunk payload
         for chunk, emb, sparse_emb in zip(chunks, embeddings, sparse_embeddings):
             chunk.embedding = emb
             chunk.sparse_embedding = sparse_emb
@@ -125,33 +125,32 @@ async def process_document_pipeline(
         logger.info("Upserting %d chunks to vector store", len(chunks))
         await vector_store.upsert_chunks(chunks)
         
-        logger.info("ETL pipeline successfully completed for document %s", rbac.document_id)        
-        
         # Mark as completed
         await update_doc_status(rbac.document_id, "completed")
         logger.info("ETL pipeline successfully completed for document %s", rbac.document_id)
 
     except Exception as exc:
-        logger.error("ETL pipeline failed for document %s", rbac.document_id)
-        # Mark as failed
+        logger.error("ETL pipeline failed for document %s: %s", rbac.document_id, str(exc))
         await update_doc_status(rbac.document_id, "failed")
         raise    
     finally:
-        # Ensure temporary file is always cleaned up
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        # 6. Guaranteed Cleanup
+        # Strict exception handling here prevents a cleanup failure from crashing the worker
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+                logger.debug("Successfully cleaned up temporary file: %s", tmp_path)
+        except OSError as cleanup_error:
+            logger.error("Failed to clean up temporary file %s: %s", tmp_path, cleanup_error)
+
 
 def _basic_markdown_chunker(text: str, max_chars: int = 1500) -> List[str]:
-    """
-    Naively chunks markdown by double-newlines (paragraphs/tables)
-    to avoid breaking internal table rows.
-    """
+    """Naively chunks markdown by double-newlines."""
     paragraphs = text.split("\n\n")
     chunks = []
     current_chunk = ""
 
     for p in paragraphs:
-        # If adding the next paragraph exceeds limit, commit current chunk
         if len(current_chunk) + len(p) > max_chars and current_chunk:
             chunks.append(current_chunk)
             current_chunk = p + "\n\n"
@@ -164,10 +163,8 @@ def _basic_markdown_chunker(text: str, max_chars: int = 1500) -> List[str]:
     return chunks
 
 async def update_doc_status(document_id: str, doc_status: str):
+    """Updates database record status."""
     async with AsyncSessionLocal() as session:
         stmt = update(DocumentDBRecord).where(DocumentDBRecord.document_id == document_id).values(status=doc_status)
         await session.execute(stmt)
         await session.commit()
-
-# In your process_document_pipeline function:
-    

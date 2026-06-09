@@ -13,10 +13,6 @@ groq_client = AsyncOpenAI(
     base_url="https://api.groq.com/openai/v1"
 )
 
-ROUTER_MODEL = "llama-3.3-70b-versatile"
-SYNTHESIS_MODEL = "llama-3.2-90b-vision-preview" 
-VISION_MODEL = "llama-3.2-90b-vision-preview"
-
 async def decompose_query(query: str) -> list[str]:
     """Router: Break a complex query into atomic sub-queries for parallel vector search."""
     system_prompt = (
@@ -28,7 +24,7 @@ async def decompose_query(query: str) -> list[str]:
     
     try:
         response = await groq_client.chat.completions.create(
-            model=ROUTER_MODEL,
+            model=settings.ROUTER_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": query}
@@ -56,7 +52,7 @@ async def generate_answer(query: str, context: str) -> str:
     )
     
     response = await groq_client.chat.completions.create(
-        model=SYNTHESIS_MODEL,
+        model=settings.SYNTHESIS_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
     )
@@ -72,7 +68,7 @@ async def generate_image_description(base64_image: str) -> str:
     
     try:
         response = await groq_client.chat.completions.create(
-            model=VISION_MODEL,
+            model=settings.VISION_MODEL,
             messages=[
                 {
                     "role": "user",

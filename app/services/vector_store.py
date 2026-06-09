@@ -49,55 +49,6 @@ class VectorStore:
     async def close(self) -> None:
         await self.client.close()
 
-    async def hybrid_search(
-        self,
-        user: UserIdentity,
-        query_vector: list[float],
-        top_k: int = 5,
-        filter_document_ids: list[str] | None = None,
-    ) -> list[RetrievedChunk]:
-        """Execute dense vector search with strict RBAC metadata pre-filter.
-
-        The filter encodes the mathematical condition:
-            metadata.allowed_roles ∩ user.permission_groups ≠ ∅
-        """
-        # Build RBAC condition: user must share at least one role with chunk
-        rbac_conditions: list[models.Condition] = [
-            models.FieldCondition(
-                key="rbac.allowed_roles",
-                match=models.MatchAny(any=[r.lower() for r in user.permission_groups]),
-            )
-        ]
-
-        # Admin bypass — they see everything, so skip role filtering
-        if user.is_admin:
-            rbac_conditions = []
-
-        # Optional: restrict to specific documents
-        if filter_document_ids:
-            rbac_conditions.append(
-                models.FieldCondition(
-                    key="rbac.document_id",
-                    match=models.MatchAny(any=filter_document_ids),
-                )
-            )
-
-        query_filter = (
-            models.Filter(must=rbac_conditions) if rbac_conditions else None
-        )
-
-        try:
-            results = await self.client.search(
-                collection_name=COLLECTION_NAME,
-                query_vector=query_vector,
-                query_filter=query_filter,
-                limit=top_k,
-                with_payload=True,
-            )
-        except Exception as exc:
-            raise VectorStoreError(f"Search failed: {exc}") from exc
-
-        return [_to_retrieved_chunk(r) for r in results]
 
     async def delete_by_document(self, document_id: str) -> None:
         """Remove all chunks belonging to a given document."""

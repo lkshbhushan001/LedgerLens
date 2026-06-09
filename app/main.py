@@ -20,6 +20,8 @@ from app.routers import health, ingestion, query, evaluation
 from app.services.embeddings import get_vector_size
 from app.services.vector_store import vector_store
 from app.utils.logging_config import configure_logging
+from app.services.cache import semantic_cache
+from app.routers import auth, health, ingestion, query, evaluation
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,9 @@ async def lifespan(app: FastAPI):
 
     await vector_store.ensure_collection(vector_size=vector_dim)
     logger.info("Vector store ready: %s", settings.QDRANT_COLLECTION)
+
+    await semantic_cache.initialize_index(vector_dim=vector_dim)
+    logger.info("Semantic cache ready")
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -81,6 +86,7 @@ def create_app() -> FastAPI:
         )
 
     # Routers
+    app.include_router(auth.router)
     app.include_router(health.router)
     app.include_router(ingestion.router)
     app.include_router(query.router)

@@ -1,6 +1,6 @@
 """JWT creation, validation, and RBAC middleware.
 
-Uses python-jose for JWT operations and passlib for password hashing.
+Uses PyJWT for JWT operations and passlib for password hashing.
 The `require_user` dependency enforces identity *before* any AI or DB code runs.
 """
 
@@ -10,9 +10,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -64,7 +64,7 @@ def _decode_token(token: str) -> dict:
     """Decode and validate a JWT string."""
     try:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError as exc:
+    except jwt.InvalidTokenError as exc:
         logger.warning("JWT decode failed: %s", exc)
         raise AuthenticationError("Invalid or expired token") from exc
 
