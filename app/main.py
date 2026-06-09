@@ -16,7 +16,6 @@ from fastapi.responses import JSONResponse
 from app.db.database import engine, Base
 from app.core.config import settings
 from app.core.exceptions import AppException
-from app.routers import health, ingestion, query, evaluation
 from app.services.embeddings import get_vector_size
 from app.services.vector_store import vector_store
 from app.utils.logging_config import configure_logging

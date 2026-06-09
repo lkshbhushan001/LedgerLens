@@ -7,6 +7,7 @@ import tempfile
 import uuid
 from typing import List
 
+import pdfplumber 
 from llama_parse import LlamaParse
 from sqlalchemy import update
 from transformers import AutoTokenizer
@@ -16,10 +17,50 @@ from app.core.config import settings
 from app.models.schemas import ChunkPayload, ChunkType, RBACMetadata
 from app.services.embeddings import encode, encode_sparse
 from app.services.vector_store import vector_store
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.services.llm import generate_image_description
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Fallback Logic
+# ---------------------------------------------------------------------------
+
+class MockDocument:
+    """A mock object that mimics LlamaParse's document structure (.text, .images)"""
+    def __init__(self, text: str):
+        self.text = text
+        self.images = []
+
+def _local_pdf_fallback(file_path: str) -> list[MockDocument]:
+    """Synchronous fallback parser using pdfplumber."""
+    logger.warning("Executing local parsing via pdfplumber for: %s", file_path)
+    
+    fallback_docs = []
+    try:
+        with pdfplumber.open(file_path) as pdf:
+            full_text = []
+            for page_num, page in enumerate(pdf.pages, start=1):
+                text = page.extract_text()
+                if text:
+                    full_text.append(f"--- Page {page_num} ---\n{text}")
+            
+            combined_text = "\n\n".join(full_text)
+
+            if combined_text.strip():
+                fallback_docs.append(MockDocument(combined_text))
+                logger.info("Successfully extracted text from %d pages using local fallback.", len(pdf.pages))
+            else:
+                logger.error("Local fallback extracted zero text from the document.")
+                
+    except Exception as fallback_exc:
+        logger.error("Critical Failure: Local fallback parser also failed: %s", fallback_exc)
+        raise fallback_exc
+
+    return fallback_docs
+
+# ---------------------------------------------------------------------------
+# Main Pipeline
+# ---------------------------------------------------------------------------
 
 async def process_document_pipeline(
     file_bytes: bytes,
@@ -28,7 +69,7 @@ async def process_document_pipeline(
 ) -> None:
     """
     Executes the full ETL pipeline asynchronously:
-    1. Layout-Aware Parsing (LlamaParse)
+    1. Layout-Aware Parsing (LlamaParse) with Local Fallback
     2. Semantic Chunking
     3. Dense Vector Embedding
     4. Vector Store Upsert
@@ -51,12 +92,21 @@ async def process_document_pipeline(
         parser = LlamaParse(
             api_key=settings.LLAMA_CLOUD_API_KEY,
             result_type="markdown",
-            premium_mode=True,
+            premium_mode=True,  # Ensure premium_mode is True to extract images
             verbose=False,
         )
         
-        parsed_docs = await parser.aload_data(tmp_path)
-        
+        # --- ROBUST FALLBACK INTEGRATION ---
+        try:
+            logger.info("Attempting LlamaParse on %s", filename)
+            parsed_docs = await parser.aload_data(tmp_path)
+        except Exception as parse_exc:
+            logger.warning("LlamaParse API failed (%s). Triggering pdfplumber fallback.", parse_exc)
+            loop = asyncio.get_running_loop()
+            # Run the synchronous fallback in a thread pool to avoid blocking the async event loop
+            parsed_docs = await loop.run_in_executor(None, _local_pdf_fallback, tmp_path)
+        # -----------------------------------
+
         if not parsed_docs:
             logger.warning("No content could be extracted from %s", filename)
             await update_doc_status(rbac.document_id, "failed")
@@ -68,10 +118,9 @@ async def process_document_pipeline(
         for doc in parsed_docs:
             images = getattr(doc, 'images', []) 
             
-            # 3A. Process Text
-            raw_chunks = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
-            
-            for text in raw_chunks.split_text(doc.text):
+            # 3A. Process Text (Now fully compatible with MockDocument from fallback)
+            raw_chunks = _basic_markdown_chunker(doc.text, max_chars=1500)
+            for text in raw_chunks:
                 text = text.strip()
                 if not text:
                     continue
@@ -84,11 +133,11 @@ async def process_document_pipeline(
                         text=text,
                         chunk_type=ChunkType.TABLE if is_table else ChunkType.TEXT,
                         rbac=rbac,
-                        token_count=AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=True).encode(text, return_tensors="pt").shape[1],
+                        token_count=AutoTokenizer.from_pretrained("gpt2").encode(text, add_special_tokens=False).__len__(),
                     )
                 )
             
-            # 3B. Process Images
+            # 3B. Process Images (Will safely be skipped if using MockDocument)
             for img_dict in images:
                 base64_data = img_dict.get('base64') 
                 if base64_data:
@@ -102,7 +151,7 @@ async def process_document_pipeline(
                             chunk_type=ChunkType.IMAGE_DESCRIPTION,
                             image_description=img_desc,
                             rbac=rbac,
-                            token_count=AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=True).encode(img_desc, return_tensors="pt").shape[1],
+                            token_count=AutoTokenizer.from_pretrained("gpt2").encode(img_desc, add_special_tokens=False).__len__(),
                         )
                     )
 
@@ -138,7 +187,6 @@ async def process_document_pipeline(
         raise    
     finally:
         # 6. Guaranteed Cleanup
-        # Strict exception handling here prevents a cleanup failure from crashing the worker
         try:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
@@ -148,7 +196,7 @@ async def process_document_pipeline(
 
 
 def _basic_markdown_chunker(text: str, max_chars: int = 1500) -> List[str]:
-    """Naively chunks markdown by double-newlines."""
+    """Naively chunks markdown by double-newlines. (Consider adding overlap in future!)"""
     paragraphs = text.split("\n\n")
     chunks = []
     current_chunk = ""

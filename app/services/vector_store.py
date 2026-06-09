@@ -11,7 +11,7 @@ import logging
 from typing import Any
 
 from qdrant_client import AsyncQdrantClient, models
-
+from tenacity import retry, stop_after_attempt, wait_exponential
 from app.core.config import settings
 from app.core.exceptions import VectorStoreError
 from app.models.schemas import ChunkPayload, RetrievedChunk, UserIdentity
@@ -44,12 +44,13 @@ class VectorStore:
         self.client = AsyncQdrantClient(
             url=settings.QDRANT_URL,
             api_key=settings.QDRANT_API_KEY or None,
+            timeout=15.0
         )
 
     async def close(self) -> None:
         await self.client.close()
 
-
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
     async def delete_by_document(self, document_id: str) -> None:
         """Remove all chunks belonging to a given document."""
         try:
@@ -67,6 +68,7 @@ class VectorStore:
         except Exception as exc:
             raise VectorStoreError(f"Delete failed: {exc}") from exc
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
     async def ensure_collection(self, vector_size: int) -> None:
         """Create collection if missing; ensure payload indices exist."""
         try:
@@ -103,6 +105,7 @@ class VectorStore:
                     wait=True,
                 )
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
     async def upsert_chunks(self, chunks: list[ChunkPayload]) -> None:
         if not chunks:
             return
@@ -138,6 +141,7 @@ class VectorStore:
         except Exception as exc:
             raise VectorStoreError(f"Upsert failed: {exc}") from exc
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
     async def hybrid_search(
         self,
         user: UserIdentity,
@@ -229,6 +233,7 @@ class VectorStore:
 # ---------------------------------------------------------------------------
 
 # Ensure the helper accepts the new fused score
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
 def _to_retrieved_chunk(point: models.ScoredPoint, custom_score: float | None = None) -> RetrievedChunk:
     from app.models.schemas import ChunkType, RBACMetadata
     

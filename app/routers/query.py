@@ -27,10 +27,12 @@ async def query_rag(
 ) -> RAGResponse:
     t0 = time.perf_counter()
 
-    # 1. Input Guardrail & Cache Check (From Phase 3)
+   # 1. Input Guardrail & Cache Check
     check_input_guardrails(request.question)
     query_vector = await encode_query(request.question)
-    cached_answer = await semantic_cache.get(query_vector)
+    
+    # Pass user roles to isolate the cache lookup
+    cached_answer = await semantic_cache.get(query_vector, roles=user.permission_groups)
     
     if cached_answer:
         return RAGResponse(
@@ -83,11 +85,11 @@ async def query_rag(
     else:
         answer = "No relevant documents found for your permission level."
 
-    # 6. Output Guardrail & Cache (From Phase 3)
+   # 6. Output Guardrail & Cache
     safe_answer = apply_output_guardrails(answer)
     if reranked_chunks:
-        await semantic_cache.set(query_vector, safe_answer)
-
+        # Pass user roles to isolate the cache storage
+        await semantic_cache.set(query_vector, safe_answer, roles=user.permission_groups)
     latency_ms = (time.perf_counter() - t0) * 1000
 
     return RAGResponse(
