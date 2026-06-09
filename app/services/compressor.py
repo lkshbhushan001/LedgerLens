@@ -1,10 +1,14 @@
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor  # 1. Import ThreadPoolExecutor
 from llmlingua import PromptCompressor
 
 logger = logging.getLogger(__name__)
 
 _compressor = None
+
+# 2. Instantiate a bounded executor (limit to 1 or 2 workers)
+_executor = ThreadPoolExecutor(max_workers=1)
 
 def _load_compressor():
     global _compressor
@@ -37,4 +41,5 @@ async def compress_context(query: str, chunks: list[str], target_ratio: float = 
         return result["compressed_prompt"]
 
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _compute)
+    # 3. Pass the custom _executor instead of None
+    return await loop.run_in_executor(_executor, _compute)
