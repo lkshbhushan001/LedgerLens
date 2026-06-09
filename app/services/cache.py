@@ -68,10 +68,9 @@ class SemanticCache:
             
             if res.docs:
                 score = float(res.docs[0].score)
-                if (1.0 - score) >= self.similarity_threshold:
-                    logger.info("Semantic cache hit! Score: %f", 1.0 - score)
+                if score >= self.similarity_threshold:
+                    logger.info("Semantic cache hit! Score: %f", score)
                     return res.docs[0].answer.decode('utf-8')
-                    
             return None
             
         except Exception as exc:

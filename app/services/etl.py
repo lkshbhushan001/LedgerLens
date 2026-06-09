@@ -17,6 +17,14 @@ from app.core.config import settings
 from app.models.schemas import ChunkPayload, ChunkType, RBACMetadata
 from app.services.embeddings import encode, encode_sparse
 from app.services.vector_store import vector_store
+
+_gpt2_tokenizer: AutoTokenizer | None = None
+
+def _get_gpt2_tokenizer() -> AutoTokenizer:
+    global _gpt2_tokenizer
+    if _gpt2_tokenizer is None:
+        _gpt2_tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    return _gpt2_tokenizer
 from app.services.llm import generate_image_description
 
 logger = logging.getLogger(__name__)
@@ -127,13 +135,14 @@ async def process_document_pipeline(
                     
                 is_table = "|" in text and "-|-" in text
                 
-                chunks.append(
-                    ChunkPayload(
-                        chunk_id=str(uuid.uuid4()),
-                        text=text,
-                        chunk_type=ChunkType.TABLE if is_table else ChunkType.TEXT,
-                        rbac=rbac,
-                        token_count=AutoTokenizer.from_pretrained("gpt2").encode(text, add_special_tokens=False).__len__(),
+tokenizer = _get_gpt2_tokenizer()
+                    chunks.append(
+                        ChunkPayload(
+                            chunk_id=str(uuid.uuid4()),
+                            text=text,
+                            chunk_type=ChunkType.TABLE if is_table else ChunkType.TEXT,
+                            rbac=rbac,
+                            token_count=len(tokenizer.encode(text, add_special_tokens=False)),
                     )
                 )
             
@@ -144,6 +153,7 @@ async def process_document_pipeline(
                     logger.info("Image detected. Routing to Vision LLM for description.")
                     img_desc = await generate_image_description(base64_data)
                     
+                    tokenizer = _get_gpt2_tokenizer()
                     chunks.append(
                         ChunkPayload(
                             chunk_id=str(uuid.uuid4()),
@@ -151,7 +161,7 @@ async def process_document_pipeline(
                             chunk_type=ChunkType.IMAGE_DESCRIPTION,
                             image_description=img_desc,
                             rbac=rbac,
-                            token_count=AutoTokenizer.from_pretrained("gpt2").encode(img_desc, add_special_tokens=False).__len__(),
+                            token_count=len(tokenizer.encode(img_desc, add_special_tokens=False)),
                         )
                     )
 

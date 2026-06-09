@@ -22,7 +22,6 @@ async def _call_router_llm(prompt: str, query: str):
             {"role": "user", "content": query}
         ],
         temperature=0.0,
-        response_format={"type": "json_object"}
     )
 
 async def decompose_query(query: str) -> list[str]:
@@ -37,11 +36,32 @@ async def decompose_query(query: str) -> list[str]:
     try:
         response = await _call_router_llm(system_prompt, query)
         content = response.choices[0].message.content
-        data = json.loads(content)
-        queries = data.get("sub_queries", [query])
-        
+        if not isinstance(content, str):
+            content = str(content)
+
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            import re
+            match = re.search(r"\{.*\}", content, re.S)
+            if match:
+                data = json.loads(match.group(0))
+            else:
+                raise
+
+        queries = data.get("sub_queries")
+        if isinstance(queries, str):
+            queries = [queries]
+        if not isinstance(queries, list):
+            queries = [query]
+
+        queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
+        if not queries:
+            queries = [query]
+
         logger.info("Decomposed query '%s' into %d sub-queries", query[:30], len(queries))
         return queries
+
     except Exception as exc:
         logger.warning("Query decomposition failed after retries, falling back to original query: %s", exc)
         return [query]
