@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.models.schemas import ChunkPayload, ChunkType, RBACMetadata
 from app.services.embeddings import encode, encode_sparse
 from app.services.vector_store import vector_store
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.services.llm import generate_image_description
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ async def process_document_pipeline(
         parser = LlamaParse(
             api_key=settings.LLAMA_CLOUD_API_KEY,
             result_type="markdown",
+            premium_mode=True,
             verbose=False,
         )
         
@@ -67,8 +69,9 @@ async def process_document_pipeline(
             images = getattr(doc, 'images', []) 
             
             # 3A. Process Text
-            raw_chunks = _basic_markdown_chunker(doc.text, max_chars=1500)
-            for text in raw_chunks:
+            raw_chunks = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
+            
+            for text in raw_chunks.split_text(doc.text):
                 text = text.strip()
                 if not text:
                     continue
