@@ -9,7 +9,7 @@ from typing import List
 
 from llama_parse import LlamaParse
 from sqlalchemy import update
-
+from transformers import AutoTokenizer
 from app.db.database import AsyncSessionLocal
 from app.db.models import DocumentDBRecord
 from app.core.config import settings
@@ -81,7 +81,7 @@ async def process_document_pipeline(
                         text=text,
                         chunk_type=ChunkType.TABLE if is_table else ChunkType.TEXT,
                         rbac=rbac,
-                        token_count=len(text) // 4,
+                        token_count=AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=True).encode(text, return_tensors="pt").shape[1],
                     )
                 )
             
@@ -99,7 +99,7 @@ async def process_document_pipeline(
                             chunk_type=ChunkType.IMAGE_DESCRIPTION,
                             image_description=img_desc,
                             rbac=rbac,
-                            token_count=len(img_desc) // 4,
+                            token_count=AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=True).encode(img_desc, return_tensors="pt").shape[1],
                         )
                     )
 

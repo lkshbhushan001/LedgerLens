@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     # --- LLM ---
     OPENAI_API_KEY: str
+    GROQ_API_KEY: str
     ROUTER_MODEL: str = "llama-3.3-70b-versatile"
     SYNTHESIS_MODEL: str = "llama-3.2-90b-vision-preview"
     VISION_MODEL: str = "llama-3.2-90b-vision-preview"
