@@ -2,7 +2,7 @@
 name = "financial-rag"
 version = "0.1.0"
 description = "Enterprise Multimodal Financial RAG with RBAC"
-requires-python = ">=3.11"
+requires-python = ">=3.11, <3.12"
 dependencies = [
     # Web framework
     "fastapi[standard]>=0.115.0",
@@ -98,3 +98,6 @@ addopts = "-v --tb=short"
 [tool.coverage.run]
 source = ["app"]
 omit = ["*/tests/*"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

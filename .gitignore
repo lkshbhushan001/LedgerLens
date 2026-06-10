@@ -1,5 +1,5 @@
-.env.example
 .env
 __pycache__/
 *.log
 *.db
+.venv
