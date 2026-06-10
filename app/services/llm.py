@@ -6,7 +6,6 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client with Groq's endpoint
 groq_client = AsyncOpenAI(
     api_key=settings.GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1"
@@ -25,7 +24,7 @@ async def _call_router_llm(prompt: str, query: str):
     )
 
 async def decompose_query(query: str) -> list[str]:
-    """Router: Break a complex query into atomic sub-queries for parallel vector search."""
+    # Break a complex query into atomic sub-queries for parallel vector search.
     system_prompt = (
         "You are an expert financial query router. "
         "Decompose the following complex user question into 1 to 3 distinct, atomic sub-questions "
@@ -68,7 +67,7 @@ async def decompose_query(query: str) -> list[str]:
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
 async def generate_answer(query: str, context: str) -> str:
-    """Synthesis: Generate the final answer using the highly compressed context."""
+    # Generate the final answer using the highly compressed context
     prompt = (
         "You are an expert financial analyst AI. Answer the user's question strictly using the provided context. "
         "If the context does not contain the answer, explicitly state that you do not have enough information.\n\n"
@@ -84,8 +83,7 @@ async def generate_answer(query: str, context: str) -> str:
     return response.choices[0].message.content
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
-async def _call_vision_llm(prompt: str, base64_image: str):
-    """Raw LLM call with retry logic for vision processing."""
+async def _call_vision_llm(prompt: str, base64_image: str):    
     return await groq_client.chat.completions.create(
         model=settings.VISION_MODEL,
         messages=[
@@ -107,7 +105,7 @@ async def _call_vision_llm(prompt: str, base64_image: str):
     )
 
 async def generate_image_description(base64_image: str) -> str:
-    """Vision: Analyze an extracted image chart/graph and return a dense description."""
+    # Analyze an extracted image chart/graph and return a dense description
     prompt = (
         "You are an expert financial data analyst. Analyze this image (which may be a chart, "
         "graph, or table). Provide a dense, highly detailed text description summarizing the axes, "

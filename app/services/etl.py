@@ -1,4 +1,3 @@
-"""Async ETL Pipeline for Document Ingestion."""
 
 import asyncio
 import logging
@@ -29,18 +28,14 @@ from app.services.llm import generate_image_description
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Fallback Logic
-# ---------------------------------------------------------------------------
 
-class MockDocument:
-    """A mock object that mimics LlamaParse's document structure (.text, .images)"""
+class MockDocument:    
     def __init__(self, text: str):
         self.text = text
         self.images = []
 
 def _local_pdf_fallback(file_path: str) -> list[MockDocument]:
-    """Synchronous fallback parser using pdfplumber."""
+    # Synchronous fallback parser using pdfplumber. This runs in a thread pool to avoid blocking the async event loop.
     logger.warning("Executing local parsing via pdfplumber for: %s", file_path)
     
     fallback_docs = []
@@ -66,9 +61,6 @@ def _local_pdf_fallback(file_path: str) -> list[MockDocument]:
 
     return fallback_docs
 
-# ---------------------------------------------------------------------------
-# Main Pipeline
-# ---------------------------------------------------------------------------
 
 async def process_document_pipeline(
     file_bytes: bytes,
@@ -76,7 +68,7 @@ async def process_document_pipeline(
     rbac: RBACMetadata,
 ) -> None:
     """
-    Executes the full ETL pipeline asynchronously:
+    Executes ETL pipeline asynchronously:
     1. Layout-Aware Parsing (LlamaParse) with Local Fallback
     2. Semantic Chunking
     3. Dense Vector Embedding
@@ -84,50 +76,42 @@ async def process_document_pipeline(
     """
     logger.info("Starting ETL pipeline for document: %s", rbac.document_id)
 
-    ext = os.path.splitext(filename)[1]
+    ext = os.path.splitext(filename)[1]    
     
-    # 1. Safely acquire a low-level OS file descriptor
     fd, tmp_path = tempfile.mkstemp(suffix=ext)
     
-    try:
-        # Write bytes and force the OS to flush buffers to disk
+    try:        
         with os.fdopen(fd, 'wb') as f:
             f.write(file_bytes)
             f.flush()
             os.fsync(f.fileno()) 
-
-        # 2. Layout-aware Parsing
+        
         parser = LlamaParse(
             api_key=settings.LLAMA_CLOUD_API_KEY,
             result_type="markdown",
-            premium_mode=True,  # Ensure premium_mode is True to extract images
+            premium_mode=True, 
             verbose=False,
-        )
+        )        
         
-        # --- ROBUST FALLBACK INTEGRATION ---
         try:
             logger.info("Attempting LlamaParse on %s", filename)
             parsed_docs = await parser.aload_data(tmp_path)
         except Exception as parse_exc:
             logger.warning("LlamaParse API failed (%s). Triggering pdfplumber fallback.", parse_exc)
-            loop = asyncio.get_running_loop()
-            # Run the synchronous fallback in a thread pool to avoid blocking the async event loop
-            parsed_docs = await loop.run_in_executor(None, _local_pdf_fallback, tmp_path)
-        # -----------------------------------
+            loop = asyncio.get_running_loop()            
+            parsed_docs = await loop.run_in_executor(None, _local_pdf_fallback, tmp_path)        
 
         if not parsed_docs:
             logger.warning("No content could be extracted from %s", filename)
             await update_doc_status(rbac.document_id, "failed")
             return
-
-        # 3. Chunking & Vision Processing
+       
         chunks: List[ChunkPayload] = []
         tokenizer = _get_gpt2_tokenizer()
         
         for doc in parsed_docs:
-            images = getattr(doc, 'images', []) 
+            images = getattr(doc, 'images', [])             
             
-            # 3A. Process Text (Now fully compatible with MockDocument from fallback)
             raw_chunks = _basic_markdown_chunker(doc.text, max_chars=1500)
             for text in raw_chunks:
                 text = text.strip()
@@ -144,9 +128,8 @@ async def process_document_pipeline(
                         rbac=rbac,
                         token_count=len(tokenizer.encode(text, add_special_tokens=False)),
                     )
-                )
+                )            
             
-            # 3B. Process Images (Will safely be skipped if using MockDocument)
             for img_dict in images:
                 base64_data = img_dict.get('base64') 
                 if base64_data:
@@ -169,8 +152,7 @@ async def process_document_pipeline(
             logger.warning("No valid chunks generated for %s", filename)
             await update_doc_status(rbac.document_id, "failed")
             return
-
-        # 4. Embed Chunks
+        
         logger.info("Encoding %d chunks for document %s", len(chunks), rbac.document_id)
         texts_to_embed = [c.text for c in chunks]
               
@@ -182,12 +164,10 @@ async def process_document_pipeline(
         for chunk, emb, sparse_emb in zip(chunks, embeddings, sparse_embeddings):
             chunk.embedding = emb
             chunk.sparse_embedding = sparse_emb
-
-        # 5. Upsert to Vector Store (Qdrant)
-        logger.info("Upserting %d chunks to vector store", len(chunks))
-        await vector_store.upsert_chunks(chunks)
         
-        # Mark as completed
+        logger.info("Upserting %d chunks to vector store", len(chunks))
+        await vector_store.upsert_chunks(chunks)        
+        
         await update_doc_status(rbac.document_id, "completed")
         logger.info("ETL pipeline successfully completed for document %s", rbac.document_id)
 
@@ -195,8 +175,7 @@ async def process_document_pipeline(
         logger.error("ETL pipeline failed for document %s: %s", rbac.document_id, str(exc))
         await update_doc_status(rbac.document_id, "failed")
         raise    
-    finally:
-        # 6. Guaranteed Cleanup
+    finally:        
         try:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
@@ -205,8 +184,7 @@ async def process_document_pipeline(
             logger.error("Failed to clean up temporary file %s: %s", tmp_path, cleanup_error)
 
 
-def _basic_markdown_chunker(text: str, max_chars: int = 1500) -> List[str]:
-    """Naively chunks markdown by double-newlines. (Consider adding overlap in future!)"""
+def _basic_markdown_chunker(text: str, max_chars: int = 1500) -> List[str]:    
     paragraphs = text.split("\n\n")
     chunks = []
     current_chunk = ""
@@ -223,8 +201,7 @@ def _basic_markdown_chunker(text: str, max_chars: int = 1500) -> List[str]:
         
     return chunks
 
-async def update_doc_status(document_id: str, doc_status: str):
-    """Updates database record status."""
+async def update_doc_status(document_id: str, doc_status: str):    
     async with AsyncSessionLocal() as session:
         stmt = update(DocumentDBRecord).where(DocumentDBRecord.document_id == document_id).values(status=doc_status)
         await session.execute(stmt)

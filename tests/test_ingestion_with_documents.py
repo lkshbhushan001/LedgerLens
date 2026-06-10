@@ -1,7 +1,3 @@
-"""
-Integration tests for document ingestion with various file types.
-Uses pytest fixtures from conftest.py to generate test documents.
-"""
 
 import pytest
 from pathlib import Path
@@ -14,14 +10,12 @@ from app.core.security import create_access_token, UserIdentity
 
 
 @pytest.fixture
-def client():
-    """Create a test client for the FastAPI app."""
+def client():    
     return TestClient(app)
 
 
 @pytest.fixture
-def test_token():
-    """Create a test JWT token for authentication."""
+def test_token():    
     user = UserIdentity(
         user_id="test_user_123",
         email="test@example.com",
@@ -36,15 +30,9 @@ def auth_headers(test_token):
     """Create authorization headers with test token."""
     return {"Authorization": f"Bearer {test_token}"}
 
-
-# ==============================================================================
-# PDF Ingestion Tests
-# ==============================================================================
-
-
 @pytest.mark.asyncio
 async def test_ingest_pdf_document(client, auth_headers, test_pdf_file):
-    """Test ingesting a PDF document."""
+    # Test ingesting a PDF document
     with patch("app.services.etl.process_document_pipeline") as mock_process:
         mock_process.return_value = {
             "chunks": [
@@ -70,8 +58,7 @@ async def test_ingest_pdf_document(client, auth_headers, test_pdf_file):
 
 
 @pytest.mark.asyncio
-async def test_pdf_status_polling(client, auth_headers, test_pdf_file):
-    """Test polling the status of a PDF ingestion."""
+async def test_pdf_status_polling(client, auth_headers, test_pdf_file):    
     mock_document_id = "doc_pdf_123"
     
     with patch("app.services.etl.process_document_pipeline") as mock_process:
@@ -98,19 +85,16 @@ async def test_pdf_status_polling(client, auth_headers, test_pdf_file):
                 f"/ingest/{mock_document_id}/status",
                 headers=auth_headers,
             )
-            
-            # Status should be accessible (may return 404 if doc not found in test DB)
+                       
             assert response.status_code in [200, 404]
 
 
-# ==============================================================================
-# XML Ingestion Tests
-# ==============================================================================
+
 
 
 @pytest.mark.asyncio
 async def test_ingest_xml_document(client, auth_headers, test_xml_file):
-    """Test ingesting an XML document."""
+    # Test ingesting an XML document
     with patch("app.services.etl.process_document_pipeline") as mock_process:
         mock_process.return_value = {
             "chunks": [
@@ -133,14 +117,9 @@ async def test_ingest_xml_document(client, auth_headers, test_xml_file):
         assert data["file_name"] == "financial_data.xml"
 
 
-# ==============================================================================
-# CSV Ingestion Tests
-# ==============================================================================
-
-
 @pytest.mark.asyncio
 async def test_ingest_csv_document(client, auth_headers, test_csv_file):
-    """Test ingesting a CSV document."""
+    # Test ingesting a CSV document
     with patch("app.services.etl.process_document_pipeline") as mock_process:
         mock_process.return_value = {
             "chunks": [
@@ -164,14 +143,9 @@ async def test_ingest_csv_document(client, auth_headers, test_csv_file):
         assert data["file_name"] == "transactions.csv"
 
 
-# ==============================================================================
-# TXT Ingestion Tests
-# ==============================================================================
-
-
 @pytest.mark.asyncio
 async def test_ingest_txt_document(client, auth_headers, test_txt_file):
-    """Test ingesting a plain text document."""
+    # Test ingesting a plain text document
     with patch("app.services.etl.process_document_pipeline") as mock_process:
         mock_process.return_value = {
             "chunks": [
@@ -194,14 +168,9 @@ async def test_ingest_txt_document(client, auth_headers, test_txt_file):
         assert data["file_name"] == "report.txt"
 
 
-# ==============================================================================
-# JSON Ingestion Tests
-# ==============================================================================
-
-
 @pytest.mark.asyncio
 async def test_ingest_json_document(client, auth_headers, test_json_file):
-    """Test ingesting a JSON document."""
+    # Test ingesting a JSON document
     with patch("app.services.etl.process_document_pipeline") as mock_process:
         mock_process.return_value = {
             "chunks": [
@@ -223,16 +192,12 @@ async def test_ingest_json_document(client, auth_headers, test_json_file):
         assert data["file_name"] == "ledger.json"
 
 
-# ==============================================================================
-# Multi-Document Batch Ingestion Test
-# ==============================================================================
-
 
 @pytest.mark.asyncio
 async def test_ingest_multiple_documents(
     client, auth_headers, test_documents_dir
 ):
-    """Test ingesting multiple documents of different types."""
+    # Test ingesting multiple documents of different types
     with patch("app.services.etl.process_document_pipeline") as mock_process:
         mock_process.return_value = {
             "chunks": [{"content": "Test chunk", "metadata": {}}],
@@ -266,14 +231,10 @@ async def test_ingest_multiple_documents(
                 assert data["file_name"] == doc_file.name
 
 
-# ==============================================================================
-# Query Integration with Ingested Documents
-# ==============================================================================
-
 
 @pytest.mark.asyncio
 async def test_query_after_document_ingestion(client, auth_headers, test_pdf_file):
-    """Test querying after ingesting a PDF document."""
+    #Test querying after ingesting a PDF document
     # Mock the ingestion
     with patch("app.services.etl.process_document_pipeline") as mock_ingest:
         mock_ingest.return_value = {
@@ -326,14 +287,10 @@ async def test_query_after_document_ingestion(client, auth_headers, test_pdf_fil
         assert query_response.status_code in [200, 422]  # 422 if input validation issues
 
 
-# ==============================================================================
-# Error Handling Tests
-# ==============================================================================
-
 
 @pytest.mark.asyncio
 async def test_ingest_unsupported_file_type(client, auth_headers, tmp_path):
-    """Test error handling for unsupported file types."""
+    #Test error handling for unsupported file types
     # Create a file with unsupported extension
     unsupported_file = tmp_path / "test.exe"
     unsupported_file.write_bytes(b"dummy content")
@@ -345,31 +302,25 @@ async def test_ingest_unsupported_file_type(client, auth_headers, tmp_path):
             headers=auth_headers,
         )
     
-    # Should either reject or accept (depending on implementation)
     assert response.status_code in [202, 400, 422]
 
 
 @pytest.mark.asyncio
 async def test_ingest_without_authentication(client, test_pdf_file):
-    """Test that ingestion requires authentication."""
+    #Test that ingestion requires authentication
     with open(test_pdf_file, "rb") as f:
         response = client.post(
             "/ingest/upload",
             files={"file": ("financial.pdf", f, "application/pdf")},
-        )
+        )    
     
-    # Should require authentication
     assert response.status_code in [401, 403]
 
-
-# ==============================================================================
-# Document Metadata Tests
-# ==============================================================================
 
 
 @pytest.mark.asyncio
 async def test_document_metadata_preservation(client, auth_headers, test_xml_file):
-    """Test that document metadata is preserved during ingestion."""
+    #Test that document metadata is preserved during ingestion
     with patch("app.services.etl.process_document_pipeline") as mock_process:
         mock_process.return_value = {
             "chunks": [{"content": "XML content", "metadata": {}}],
@@ -387,7 +338,7 @@ async def test_document_metadata_preservation(client, auth_headers, test_xml_fil
         assert response.status_code == 202
         data = response.json()
         
-        # Verify metadata fields
+        # Verify metadata
         assert "document_id" in data
         assert data["file_name"] == "financial_data.xml"
         assert data["status"] == "processing"

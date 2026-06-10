@@ -1,4 +1,3 @@
-"""Health check router."""
 
 from fastapi import APIRouter, status
 from pydantic import BaseModel

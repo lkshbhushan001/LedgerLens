@@ -1,9 +1,3 @@
-"""Pydantic domain models shared across the application.
-
-These models enforce the contracts for documents, chunks, users, RBAC metadata,
-and API request/response payloads. Every service downstream depends on them.
-"""
-
 from __future__ import annotations
 
 import uuid
@@ -13,10 +7,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-# ---------------------------------------------------------------------------
-# Enumerations
-# ---------------------------------------------------------------------------
 
 class DocumentType(str, Enum):
     PDF = "pdf"
@@ -33,9 +23,6 @@ class ChunkType(str, Enum):
     IMAGE_DESCRIPTION = "image_description"
 
 
-# ---------------------------------------------------------------------------
-# RBAC & Identity
-# ---------------------------------------------------------------------------
 
 class RBACMetadata(BaseModel):
     """Mathematical access-control payload attached to every chunk.
@@ -51,9 +38,8 @@ class RBACMetadata(BaseModel):
     uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     doc_type: DocumentType
     chunk_type: ChunkType = ChunkType.TEXT
-    # Optional fine-grained classification for financial domain
     fund_family: str | None = None
-    report_period: str | None = None  # e.g. "2024-Q3"
+    report_period: str | None = None 
 
     @field_validator("allowed_roles")
     @classmethod
@@ -61,8 +47,7 @@ class RBACMetadata(BaseModel):
         return [r.lower().strip() for r in v]
 
 
-class UserIdentity(BaseModel):
-    """Resolved user after JWT validation."""
+class UserIdentity(BaseModel):    
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -80,12 +65,8 @@ class UserIdentity(BaseModel):
         return not user_perms.isdisjoint(doc_roles)
 
 
-# ---------------------------------------------------------------------------
-# Document & Chunk
-# ---------------------------------------------------------------------------
 
-class DocumentIngestRequest(BaseModel):
-    """Payload for initiating document ingestion."""
+class DocumentIngestRequest(BaseModel):    
 
     source_filename: str = Field(..., min_length=1)
     doc_type: DocumentType
@@ -96,8 +77,7 @@ class DocumentIngestRequest(BaseModel):
     extra_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class ChunkPayload(BaseModel):
-    """A single chunk ready for embedding and vector insertion."""
+class ChunkPayload(BaseModel):    
 
     chunk_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     text: str = Field(..., min_length=1)
@@ -111,8 +91,7 @@ class ChunkPayload(BaseModel):
     image_description: str | None = None
 
 
-class DocumentRecord(BaseModel):
-    """Stored document header (not chunks)."""
+class DocumentRecord(BaseModel):    
 
     document_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     source_filename: str
@@ -123,12 +102,7 @@ class DocumentRecord(BaseModel):
     processing_status: str = "pending"  # pending | processing | completed | failed
 
 
-# ---------------------------------------------------------------------------
-# Query & Retrieval
-# ---------------------------------------------------------------------------
-
-class QueryRequest(BaseModel):
-    """Incoming user query."""
+class QueryRequest(BaseModel):    
 
     question: str = Field(..., min_length=1, max_length=4000)
     top_k: int = Field(default=5, ge=1, le=20)
@@ -136,8 +110,7 @@ class QueryRequest(BaseModel):
     filter_document_ids: list[str] | None = None
 
 
-class RetrievedChunk(BaseModel):
-    """Chunk returned from the retrieval layer."""
+class RetrievedChunk(BaseModel):    
 
     chunk_id: str
     text: str
@@ -147,8 +120,7 @@ class RetrievedChunk(BaseModel):
     page_number: int | None = None
 
 
-class RAGResponse(BaseModel):
-    """Final API response to the user."""
+class RAGResponse(BaseModel):    
 
     answer: str
     sources: list[RetrievedChunk]
@@ -158,15 +130,10 @@ class RAGResponse(BaseModel):
     evaluation_score: dict[str, float] | None = None
 
 
-# ---------------------------------------------------------------------------
-# Evaluation
-# ---------------------------------------------------------------------------
-
-class EvaluationResult(BaseModel):
-    """Offline evaluation metrics (Ragas-style)."""
+class EvaluationResult(BaseModel):    
 
     context_relevance: float  # Retrieved Relevant / Total Retrieved
     faithfulness: float  # Claims Grounded in Context / Total Claims
-    answer_relevance: float  # Match to User Intent
+    answer_relevance: float  
     overall_score: float = Field(..., ge=0.0, le=1.0)
     evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

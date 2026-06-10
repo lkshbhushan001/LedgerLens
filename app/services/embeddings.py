@@ -1,9 +1,3 @@
-"""Dense embedding encoder with async batching.
-
-Uses sentence-transformers under the hood. For production financial RAG,
-``BAAI/bge-large-en-v1.5`` (default) or ``intfloat/e5-large-v2`` provide
-superior retrieval quality vs. OpenAI embeddings on tabular financial text.
-"""
 
 from __future__ import annotations
 
@@ -24,7 +18,7 @@ _model: SentenceTransformer | None = None
 
 
 def _load_model() -> SentenceTransformer:
-    """Lazy-load the embedding model (thread-safe singleton)."""
+    # Lazy-load the embedding model to avoid startup overhead if not needed immediately.
     global _model
     if _model is None:
         logger.info("Loading embedding model: %s", settings.EMBEDDING_MODEL)
@@ -37,10 +31,7 @@ def _load_model() -> SentenceTransformer:
 
 
 async def encode(texts: list[str], batch_size: int = 32) -> list[list[float]]:
-    """Async wrapper around synchronous sentence-transformers encode.
-
-    Runs in a thread pool so the event loop stays unblocked.
-    """
+    
     if not texts:
         return []
 
@@ -52,34 +43,29 @@ async def encode(texts: list[str], batch_size: int = 32) -> list[list[float]]:
         batch_size=batch_size,
         show_progress_bar=False,
         convert_to_numpy=True,
-        normalize_embeddings=True,  # cosine similarity via dot product
+        normalize_embeddings=True,  
     )
     embeddings: np.ndarray = await loop.run_in_executor(None, fn)
     return embeddings.tolist()
 
 
-async def encode_query(text: str) -> list[float]:
-    """Encode a single query string."""
+async def encode_query(text: str) -> list[float]:    
     results = await encode([text], batch_size=1)
     return results[0]
 
 
-def get_vector_size() -> int:
-    """Return the dimensionality of the loaded model."""
+def get_vector_size() -> int:    
     model = _load_model()
-    return model.get_sentence_embedding_dimension()
+    return model.get_embedding_dimension()
 
-def _load_sparse_tokenizer():
-    """Lazy-load a fast tokenizer for BM25 term frequencies."""
+def _load_sparse_tokenizer():    
     global _sparse_tokenizer
     if _sparse_tokenizer is None:
-        logger.info("Loading sparse tokenizer: bert-base-uncased")
-        # Using a fast HuggingFace tokenizer to map text to integer IDs
+        logger.info("Loading sparse tokenizer: bert-base-uncased")        
         _sparse_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=True)
     return _sparse_tokenizer
 
-async def encode_sparse(texts: list[str]) -> list[dict[str, list]]:
-    """Compute term frequencies (TF) for Qdrant BM25 sparse vectors."""
+async def encode_sparse(texts: list[str]) -> list[dict[str, list]]:    
     if not texts:
         return []
         
@@ -100,7 +86,6 @@ async def encode_sparse(texts: list[str]) -> list[dict[str, list]]:
 
     return await loop.run_in_executor(None, _process)
 
-async def encode_query_sparse(text: str) -> dict[str, list]:
-    """Encode a single query string for sparse retrieval."""
+async def encode_query_sparse(text: str) -> dict[str, list]:    
     results = await encode_sparse([text])
     return results[0]

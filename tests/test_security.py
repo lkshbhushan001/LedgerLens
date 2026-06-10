@@ -1,5 +1,3 @@
-"""Tests for JWT security and RBAC logic."""
-
 from __future__ import annotations
 
 import pytest
@@ -70,4 +68,4 @@ class TestTokenLifecycle:
     def test_encode_decode_roundtrip(self) -> None:
         token = create_access_token("u1", "a@x.com", ["analyst"])
         assert isinstance(token, str)
-        assert len(token.split(".")) == 3  # header.payload.signature
+        assert len(token.split(".")) == 3 

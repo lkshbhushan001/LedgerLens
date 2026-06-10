@@ -1,8 +1,6 @@
 # LedgerLens Test Documents - Quick Start Guide
 
-## 📋 What We Created
-
-Your test infrastructure now includes:
+Test infrastructure includes:
 
 ### 1. **`conftest.py`** - Document Generators
 - Generates PDF, XML, CSV, TXT, JSON documents automatically
@@ -80,7 +78,7 @@ pytest tests/test_ingestion_with_documents.py -v --tb=short
 ### Step 3: Use in Your Own Tests
 
 ```python
-# Example 1: Simple PDF test
+# Simple PDF test
 def test_my_pdf_ingestion(test_pdf_file, client, auth_headers):
     with open(test_pdf_file, "rb") as f:
         response = client.post(
@@ -90,7 +88,7 @@ def test_my_pdf_ingestion(test_pdf_file, client, auth_headers):
         )
     assert response.status_code == 202
 
-# Example 2: Test all document types
+# Test all document types
 def test_all_formats(test_documents_dir, client, auth_headers):
     for doc_file in test_documents_dir.glob("*"):
         with open(doc_file, "rb") as f:
@@ -101,7 +99,7 @@ def test_all_formats(test_documents_dir, client, auth_headers):
             )
         assert response.status_code == 202
 
-# Example 3: Access persistent fixtures
+# Access persistent fixtures
 from pathlib import Path
 
 def test_with_persistent_fixtures():
@@ -155,8 +153,7 @@ def test_with_persistent_fixtures():
    ```python
    from tests.conftest import generate_pdf_content
    
-   pdf_bytes = generate_pdf_content()
-   # Use pdf_bytes in your test
+   pdf_bytes = generate_pdf_content()   
    ```
 
 ### Run Full Test Suite

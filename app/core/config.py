@@ -1,5 +1,3 @@
-"""Application configuration via Pydantic Settings."""
-
 from pathlib import Path
 
 from pydantic import Field, field_validator
@@ -8,8 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
 
-class Settings(BaseSettings):
-    """All application settings loaded from environment / .env."""
+class Settings(BaseSettings):    
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH),

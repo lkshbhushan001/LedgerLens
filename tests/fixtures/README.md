@@ -1,6 +1,6 @@
 # Test Documents Guide
 
-This directory contains test fixtures and a comprehensive system for generating test documents in various formats for testing the LedgerLens ingestion pipeline.
+This directory contains test fixtures and a system for generating test documents in various formats for testing the ingestion pipeline.
 
 ## Quick Start
 
@@ -19,8 +19,7 @@ Test documents are automatically generated and stored in `tests/fixtures/` when 
 #### Option 1: Use pytest fixtures (recommended)
 
 ```python
-def test_with_pdf(test_pdf_file):
-    """test_pdf_file is a Path object to a generated PDF"""
+def test_with_pdf(test_pdf_file):   
     with open(test_pdf_file, "rb") as f:
         response = client.post("/ingest/upload", files={"file": f})
 ```
@@ -28,8 +27,7 @@ def test_with_pdf(test_pdf_file):
 #### Option 2: Use directory fixture
 
 ```python
-def test_with_all_documents(test_documents_dir):
-    """test_documents_dir contains all generated test documents"""
+def test_with_all_documents(test_documents_dir):    
     for doc_file in test_documents_dir.glob("*"):
         with open(doc_file, "rb") as f:
             response = client.post("/ingest/upload", files={"file": f})
@@ -104,13 +102,11 @@ def test_documents_dir(tmp_path: Path) -> Path:
 ### Method 1: Add Generator Functions to conftest.py
 
 ```python
-def generate_custom_format_content() -> str:
-    """Generate your custom document format"""
+def generate_custom_format_content() -> str:    
     return """Your document content here"""
 
 @pytest.fixture
-def test_custom_file(tmp_path: Path) -> Path:
-    """Create a temporary custom file"""
+def test_custom_file(tmp_path: Path) -> Path:    
     custom_file = tmp_path / "test_custom.ext"
     custom_file.write_text(generate_custom_format_content(), encoding="utf-8")
     return custom_file

@@ -24,16 +24,9 @@ from app.routers import auth, health, ingestion, query, evaluation
 
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Lifespan
-# ---------------------------------------------------------------------------
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: ensure Qdrant collection exists with correct vector size.
-    Shutdown: close vector store connections.
-    """
+    
     configure_logging(debug=settings.DEBUG)
     logger.info("Starting %s in %s mode", settings.APP_NAME, settings.ENVIRONMENT)
 
@@ -65,11 +58,6 @@ async def lifespan(app: FastAPI):
 
     logger.info("Shutting down")
     await vector_store.close()
-
-
-# ---------------------------------------------------------------------------
-# App factory
-# ---------------------------------------------------------------------------
 
 def create_app() -> FastAPI:
     app = FastAPI(

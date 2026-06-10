@@ -1,5 +1,3 @@
-"""Centralised exception hierarchy for domain and HTTP errors."""
-
 
 class AppException(Exception):
     """Base application exception with HTTP-aware metadata."""

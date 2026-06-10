@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 from typing import Optional, List
 
-# Import generators from conftest
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
@@ -96,22 +95,21 @@ def generate_documents(
             created += 1
             
         except Exception as e:
-            print(f"❌ Error generating {fmt.upper()}: {e}")
+            print(f" Error generating {fmt.upper()}: {e}")
             errors += 1
     
     if verbose:
-        print(f"\n📊 Summary: {created} created, {errors} failed")
+        print(f"\n Summary: {created} created, {errors} failed")
     
     return 1 if errors > 0 else 0
 
 
 def list_formats() -> None:
     """Display available formats and their details."""
-    print("\n🗂️  Available Document Formats:")
+    print("\n Available Document Formats:")
     print("-" * 70)
     
-    for fmt, (filename, _, _) in GENERATORS.items():
-        # Determine availability
+    for fmt, (filename, _, _) in GENERATORS.items():        
         if fmt == "pdf" and not HAS_REPORTLAB:
             status = "⏭️  (requires: pip install reportlab)"
         else:
@@ -123,8 +121,7 @@ def list_formats() -> None:
     print()
 
 
-def main():
-    """Main entry point."""
+def main():    
     parser = argparse.ArgumentParser(
         description="Generate test documents for LedgerLens ingestion testing",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -176,7 +173,7 @@ Examples:
         list_formats()
         return 0
     
-    print(f"🚀 Generating test documents...")
+    print(f"Generating test documents...")
     print()
     
     return generate_documents(

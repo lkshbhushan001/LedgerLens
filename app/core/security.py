@@ -1,9 +1,3 @@
-"""JWT creation, validation, and RBAC middleware.
-
-Uses PyJWT for JWT operations and passlib for password hashing.
-The `require_user` dependency enforces identity *before* any AI or DB code runs.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -24,9 +18,6 @@ logger = logging.getLogger(__name__)
 _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _bearer = HTTPBearer(auto_error=False)
 
-# ---------------------------------------------------------------------------
-# Password helpers (for local user management if needed)
-# ---------------------------------------------------------------------------
 
 def hash_password(plain: str) -> str:
     return _pwd_ctx.hash(plain)
@@ -36,9 +27,6 @@ def verify_password(plain: str, hashed: str) -> bool:
     return _pwd_ctx.verify(plain, hashed)
 
 
-# ---------------------------------------------------------------------------
-# JWT lifecycle
-# ---------------------------------------------------------------------------
 
 def create_access_token(
     user_id: str | UserIdentity,
@@ -47,10 +35,7 @@ def create_access_token(
     is_admin: bool = False,
     expires_delta: timedelta | None = None,
 ) -> str:
-    """Encode identity claims into a JWT.
-
-    Supports either passing explicit identity fields or a UserIdentity object.
-    """
+    
     if isinstance(user_id, UserIdentity):
         user = user_id
         email = user.email
@@ -74,17 +59,13 @@ def create_access_token(
 
 
 def _decode_token(token: str) -> dict:
-    """Decode and validate a JWT string."""
+    
     try:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     except jwt.InvalidTokenError as exc:
         logger.warning("JWT decode failed: %s", exc)
         raise AuthenticationError("Invalid or expired token") from exc
 
-
-# ---------------------------------------------------------------------------
-# FastAPI dependency
-# ---------------------------------------------------------------------------
 
 async def require_user(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
@@ -112,10 +93,6 @@ async def require_user(
         is_admin=bool(payload.get("admin", False)),
     )
 
-
-# ---------------------------------------------------------------------------
-# Role guard helper
-# ---------------------------------------------------------------------------
 
 async def require_admin(user: Annotated[UserIdentity, Depends(require_user)]) -> UserIdentity:
     """Dependency that asserts the resolved user has admin rights."""

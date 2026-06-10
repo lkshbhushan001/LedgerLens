@@ -19,14 +19,12 @@ class SemanticCache:
         self.index_name = "idx:semantic_cache"
         self.similarity_threshold = 0.95 
 
-    def _get_role_hash(self, roles: list[str]) -> str:
-        """Create a deterministic hash of the sorted roles to use as a cache partition."""
+    def _get_role_hash(self, roles: list[str]) -> str:        
         sorted_roles = sorted([r.lower().strip() for r in roles])
         return hashlib.sha256(",".join(sorted_roles).encode()).hexdigest()
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5), reraise=True)
-    async def initialize_index(self, vector_dim: int) -> None:
-        """Create the semantic cache vector index if it does not exist."""
+    async def initialize_index(self, vector_dim: int) -> None:        
         try:
             await self.client.ft(self.index_name).info()
             logger.info("Semantic cache index '%s' already exists.", self.index_name)
@@ -50,8 +48,7 @@ class SemanticCache:
             logger.info("Semantic cache index created successfully.")
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5), reraise=True)
-    async def get(self, query_vector: list[float], roles: list[str]) -> str | None:
-        """Retrieve the semantically closest cached answer isolated by RBAC role hash."""
+    async def get(self, query_vector: list[float], roles: list[str]) -> str | None:        
         try:
             role_hash = self._get_role_hash(roles)
             vector_bytes = np.array(query_vector, dtype=np.float32).tobytes()
@@ -78,8 +75,7 @@ class SemanticCache:
             return None
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=5), reraise=True)
-    async def set(self, query_vector: list[float], answer: str, roles: list[str], ttl_seconds: int = 3600) -> None:
-        """Cache the query vector, the role hash, and the synthesized answer."""
+    async def set(self, query_vector: list[float], answer: str, roles: list[str], ttl_seconds: int = 3600) -> None:        
         try:
             role_hash = self._get_role_hash(roles)
             cache_id = f"cache:{uuid.uuid4()}"

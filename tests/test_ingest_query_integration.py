@@ -1,4 +1,3 @@
-"""Mock integration test covering ingestion and query flow."""
 
 from __future__ import annotations
 
@@ -16,11 +15,9 @@ async def _fake_process_document_pipeline(file_bytes: bytes, filename: str, rbac
 
 def test_ingest_and_query_flow(monkeypatch):
     client = TestClient(app)
-
-    # Patch ingestion background pipeline to avoid external dependencies
+    
     monkeypatch.setattr("app.routers.ingestion.process_document_pipeline", _fake_process_document_pipeline)
-
-    # Patch query pipeline components to return deterministic search results
+    
     monkeypatch.setattr("app.routers.query.decompose_query", lambda query: [query])
     monkeypatch.setattr("app.routers.query.semantic_cache.get", lambda query_vector, roles: None)
     monkeypatch.setattr("app.routers.query.semantic_cache.set", lambda query_vector, answer, roles: None)

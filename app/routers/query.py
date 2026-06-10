@@ -1,4 +1,3 @@
-"""Query / RAG router."""
 
 import time
 import asyncio
@@ -13,7 +12,6 @@ from app.models.schemas import QueryRequest, RAGResponse, RetrievedChunk, UserId
 from app.services.embeddings import encode_query, encode_query_sparse
 from app.services.vector_store import vector_store
 
-# --- Import Cache and Guardrails ---
 from app.services.cache import semantic_cache
 from app.services.guardrails import check_input_guardrails, apply_output_guardrails
 
@@ -26,12 +24,10 @@ async def query_rag(
     request: QueryRequest,
 ) -> RAGResponse:
     t0 = time.perf_counter()
-
-   # 1. Input Guardrail & Cache Check
+   
     check_input_guardrails(request.question)
-    query_vector = await encode_query(request.question)
+    query_vector = await encode_query(request.question)    
     
-    # Pass user roles to isolate the cache lookup
     cached_answer = await semantic_cache.get(query_vector, roles=user.permission_groups)
     
     if cached_answer:
@@ -39,17 +35,14 @@ async def query_rag(
             answer=apply_output_guardrails(cached_answer),
             sources=[], latency_ms=round((time.perf_counter() - t0)*1000, 2), cache_hit=True
         )
-
-    # 2. Query Decomposition Router
-    sub_queries = await decompose_query(request.question)
     
-    # 3. Parallel Hybrid Search for all sub-queries
+    sub_queries = await decompose_query(request.question)
+        
     pooled_chunks = {}
     
     async def _search_sub_query(sq: str):
         sq_dense = await encode_query(sq)
-        sq_sparse = await encode_query_sparse(sq)
-        # Fetch a wider net (top_k * 2) per sub-query for the reranker
+        sq_sparse = await encode_query_sparse(sq)        
         return await vector_store.hybrid_search(
             user=user, query_vector=sq_dense, query_sparse=sq_sparse, 
             top_k=request.top_k * 2, filter_document_ids=request.filter_document_ids
@@ -57,35 +50,29 @@ async def query_rag(
 
     search_tasks = [_search_sub_query(sq) for sq in sub_queries]
     search_results_lists = await asyncio.gather(*search_tasks)
-
-    # Deduplicate chunks based on chunk_id
+    
     for results in search_results_lists:
         for chunk in results:
             if chunk.chunk_id not in pooled_chunks:
                 pooled_chunks[chunk.chunk_id] = chunk
 
     unique_chunks = list(pooled_chunks.values())
-
-    # 4. Cross-Encoder Reranking (Against original question)
+    
     reranked_chunks = await rerank_chunks(
         query=request.question,
         chunks=unique_chunks,
         top_k=request.top_k
     )
-
-    # 5. Synthesis & Compression
+    
     if reranked_chunks:
-        raw_texts = [c.text for c in reranked_chunks]
+        raw_texts = [c.text for c in reranked_chunks]        
         
-        # Compress the context to maximize density
-        compressed_context = await compress_context(request.question, raw_texts)
+        compressed_context = await compress_context(request.question, raw_texts)        
         
-        # Generate answer using Groq LLM
         answer = await generate_answer(request.question, compressed_context)
     else:
         answer = "No relevant documents found for your permission level."
-
-   # 6. Output Guardrail & Cache
+   
     safe_answer = apply_output_guardrails(answer)
     if reranked_chunks:
         # Pass user roles to isolate the cache storage

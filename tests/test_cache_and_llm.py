@@ -1,4 +1,3 @@
-"""Regression tests for semantic cache thresholding and query decomposition fallback."""
 
 from __future__ import annotations
 

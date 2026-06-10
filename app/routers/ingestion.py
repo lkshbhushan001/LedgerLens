@@ -1,4 +1,3 @@
-"""Document ingestion router."""
 
 from __future__ import annotations
 
@@ -40,12 +39,10 @@ async def upload_document(
     fund_family: str | None = Form(default=None),
     report_period: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
-) -> DocumentRecord:
-    """Accept a raw document and enqueue it for async ETL processing."""
+) -> DocumentRecord:    
     
     roles_list = [r.strip() for r in allowed_roles.split(",") if r.strip()]
-
-    # Generate the Document ID early to bind to the RBAC metadata payload
+    
     document_id = str(uuid.uuid4())
 
     meta = DocumentIngestRequest(
@@ -80,11 +77,9 @@ async def upload_document(
     )
     db.add(doc_record)
     await db.commit()
-
-    # Read bytes immediately before the FastAPI file context closes
+    
     file_bytes = await file.read()
-
-    # Trigger the Phase 1 async ETL pipeline
+    
     background_tasks.add_task(
         process_document_pipeline,
         file_bytes=file_bytes,
@@ -104,8 +99,7 @@ async def upload_document(
 async def get_document_status(
     document_id: str,
     db: AsyncSession = Depends(get_db)
-):
-    """Allow users to poll for document ingestion status."""
+):    
     result = await db.execute(select(DocumentDBRecord).where(DocumentDBRecord.document_id == document_id))
     record = result.scalars().first()
     

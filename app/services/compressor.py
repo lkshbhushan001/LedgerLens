@@ -14,7 +14,7 @@ def _load_compressor():
     global _compressor
     if _compressor is None:
         logger.info("Loading LLMLingua compressor")
-        # Using LLMLingua-2 for smaller footprint and faster CPU inference
+        # Using LLMLingua-2 for faster CPU inference
         _compressor = PromptCompressor(
             model_name="microsoft/llmlingua-2-xlm-roberta-large-meetingbank",
             use_llmlingua2=True
@@ -22,7 +22,7 @@ def _load_compressor():
     return _compressor
 
 async def compress_context(query: str, chunks: list[str], target_ratio: float = 0.5) -> str:
-    """Compress retrieved chunks by filtering non-essential tokens."""
+    # Compress retrieved chunks by filtering non-essential tokens.
     if not chunks:
         return ""
         
@@ -40,6 +40,5 @@ async def compress_context(query: str, chunks: list[str], target_ratio: float = 
         )
         return result["compressed_prompt"]
 
-    loop = asyncio.get_running_loop()
-    # 3. Pass the custom _executor instead of None
+    loop = asyncio.get_running_loop()    
     return await loop.run_in_executor(_executor, _compute)

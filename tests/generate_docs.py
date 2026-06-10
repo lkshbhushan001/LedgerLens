@@ -1,12 +1,9 @@
-#!/usr/bin/env python3
-"""Direct document generator - runs the generation functions directly."""
 
 import io
 import json
 import sys
 from pathlib import Path
 
-# Try to import optional PDF library
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas

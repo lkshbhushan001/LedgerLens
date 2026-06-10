@@ -1,7 +1,3 @@
-"""
-Pytest configuration and fixtures for test documents.
-Generates sample PDFs, XMLs, CSVs, and TXT files for testing ingestion pipeline.
-"""
 
 import io
 import json
@@ -23,10 +19,6 @@ except ImportError:
     HAS_REPORTLAB = False
 
 
-# ==============================================================================
-# Global Groq API Mocking (Minimize actual API usage)
-# ==============================================================================
-
 @pytest.fixture(scope="session", autouse=True)
 def mock_groq_api():
     """Mock all Groq API calls globally to minimize API usage during testing."""
@@ -46,10 +38,6 @@ def mock_groq_api():
             mock_llm.return_value = MagicMock()
             yield
 
-
-# ==============================================================================
-# Test Database Setup (Must run before app imports)
-# ==============================================================================
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_env():
@@ -183,7 +171,7 @@ def generate_csv_content() -> str:
 
 
 def generate_txt_content() -> str:
-    """Generate a sample text document."""
+    """Sample text document."""
     return """FINANCIAL REPORT - YEAR 2024
 
 Executive Summary
@@ -221,7 +209,7 @@ solid financial results with improved operational efficiency."""
 
 
 def generate_json_content() -> str:
-    """Generate a sample JSON with financial ledger data."""
+    """Sample JSON with financial ledger data."""
     ledger_data = {
         "company": {
             "name": "Global Finance Ltd",
@@ -282,14 +270,8 @@ def generate_json_content() -> str:
     return json.dumps(ledger_data, indent=2)
 
 
-# ==============================================================================
-# Pytest Fixtures
-# ==============================================================================
-
-
 @pytest.fixture
-def test_pdf_file(tmp_path: Path) -> Path:
-    """Create a temporary PDF file for testing."""
+def test_pdf_file(tmp_path: Path) -> Path:    
     if not HAS_REPORTLAB:
         pytest.skip("reportlab not installed")
     
@@ -299,40 +281,35 @@ def test_pdf_file(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def test_xml_file(tmp_path: Path) -> Path:
-    """Create a temporary XML file for testing."""
+def test_xml_file(tmp_path: Path) -> Path:    
     xml_file = tmp_path / "test_financial_data.xml"
     xml_file.write_text(generate_xml_content(), encoding="utf-8")
     return xml_file
 
 
 @pytest.fixture
-def test_csv_file(tmp_path: Path) -> Path:
-    """Create a temporary CSV file for testing."""
+def test_csv_file(tmp_path: Path) -> Path:    
     csv_file = tmp_path / "test_transactions.csv"
     csv_file.write_text(generate_csv_content(), encoding="utf-8")
     return csv_file
 
 
 @pytest.fixture
-def test_txt_file(tmp_path: Path) -> Path:
-    """Create a temporary TXT file for testing."""
+def test_txt_file(tmp_path: Path) -> Path:    
     txt_file = tmp_path / "test_financial_report.txt"
     txt_file.write_text(generate_txt_content(), encoding="utf-8")
     return txt_file
 
 
 @pytest.fixture
-def test_json_file(tmp_path: Path) -> Path:
-    """Create a temporary JSON file for testing."""
+def test_json_file(tmp_path: Path) -> Path:    
     json_file = tmp_path / "test_ledger_data.json"
     json_file.write_text(generate_json_content(), encoding="utf-8")
     return json_file
 
 
 @pytest.fixture
-def test_documents_dir(tmp_path: Path) -> Path:
-    """Create a temporary directory with all test documents."""
+def test_documents_dir(tmp_path: Path) -> Path:    
     docs_dir = tmp_path / "test_documents"
     docs_dir.mkdir()
     
@@ -347,14 +324,9 @@ def test_documents_dir(tmp_path: Path) -> Path:
     return docs_dir
 
 
-# ==============================================================================
-# Fixtures directory setup (for persistent test documents)
-# ==============================================================================
-
 
 @pytest.fixture(scope="session", autouse=True)
-async def initialize_test_db():
-    """Initialize test database with all required tables."""
+async def initialize_test_db():    
     import asyncio
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
     from app.db.database import Base
@@ -372,8 +344,7 @@ async def initialize_test_db():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def create_fixtures_directory():
-    """Create persistent test documents in tests/fixtures/ directory."""
+def create_fixtures_directory():    
     fixtures_dir = Path(__file__).parent / "fixtures"
     fixtures_dir.mkdir(exist_ok=True)
     
@@ -387,33 +358,17 @@ def create_fixtures_directory():
     
     for filename, content in doc_files.items():
         filepath = fixtures_dir / filename
-        filepath.write_text(content, encoding="utf-8")
+        filepath.write_text(content, encoding="utf-8")    
     
-    # Create PDF if reportlab is available
     if HAS_REPORTLAB:
         pdf_path = fixtures_dir / "financial_report.pdf"
         pdf_path.write_bytes(generate_pdf_content())
     
-    yield
-    # Cleanup is optional - you may want to keep fixtures for inspection
-
-
-# ==============================================================================
-# Helper function for direct use in tests
-# ==============================================================================
+    yield    
 
 
 def get_test_document_path(doc_type: str, tmp_path: Path) -> Path:
-    """
-    Get a path to a test document of the specified type.
     
-    Args:
-        doc_type: One of 'pdf', 'xml', 'csv', 'txt', 'json'
-        tmp_path: Temporary path fixture from pytest
-    
-    Returns:
-        Path to the generated test document
-    """
     generators = {
         "pdf": lambda p: p / "test.pdf" if (p / "test.pdf").write_bytes(generate_pdf_content()) or True else None,
         "xml": lambda p: p / "test.xml" if (p / "test.xml").write_text(generate_xml_content()) or True else None,

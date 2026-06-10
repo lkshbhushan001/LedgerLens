@@ -1,9 +1,3 @@
-"""Qdrant vector store client with RBAC-aware hybrid search.
-
-Implements dense vector search + payload filtering for metadata roles.
-The collection schema pre-indexes ``allowed_roles`` and ``document_id``
-to prevent retrieval latency from scaling with collection size.
-"""
 
 from __future__ import annotations
 
@@ -20,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 COLLECTION_NAME: str = settings.QDRANT_COLLECTION
 
-# Pre-defined payload indices for RBAC enforcement performance
 _PAYLOAD_INDICES: list[tuple[str, models.KeywordIndexParams]] = [
     ("rbac.allowed_roles", models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD)),
     ("rbac.document_id", models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD)),
@@ -28,8 +21,7 @@ _PAYLOAD_INDICES: list[tuple[str, models.KeywordIndexParams]] = [
 ]
 
 
-class VectorStore:
-    """Async Qdrant client wrapper with automatic collection management."""
+class VectorStore:    
 
     def __init__(self) -> None:
         self.client = AsyncQdrantClient(
@@ -42,8 +34,7 @@ class VectorStore:
         await self.client.close()
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
-    async def delete_by_document(self, document_id: str) -> None:
-        """Remove all chunks belonging to a given document."""
+    async def delete_by_document(self, document_id: str) -> None:        
         try:
             await self.client.delete(
                 collection_name=COLLECTION_NAME,
@@ -60,8 +51,7 @@ class VectorStore:
             raise VectorStoreError(f"Delete failed: {exc}") from exc
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
-    async def ensure_collection(self, vector_size: int) -> None:
-        """Create collection if missing; ensure payload indices exist."""
+    async def ensure_collection(self, vector_size: int) -> None:        
         try:
             exists = await self.client.collection_exists(COLLECTION_NAME)
         except Exception as exc:
@@ -80,14 +70,14 @@ class VectorStore:
                 },
                 sparse_vectors_config={
                     "bm25": models.SparseVectorParams(
-                        modifier=models.Modifier.IDF  # Qdrant calculates IDF server-side
+                        modifier=models.Modifier.IDF 
                     )
                 },
                 optimizers_config=models.OptimizersConfigDiff(
                     indexing_threshold=1000,
                 ),
             )
-            # Create payload indices for fast RBAC filtering
+            
             for field_name, index_params in _PAYLOAD_INDICES:
                 await self.client.create_payload_index(
                     collection_name=COLLECTION_NAME,
@@ -140,9 +130,8 @@ class VectorStore:
         query_sparse: dict[str, list],
         top_k: int = 5,
         filter_document_ids: list[str] | None = None,
-        alpha: float = 0.5, # 0.5 = equal weight
-    ) -> list[RetrievedChunk]:
-        """Execute parallel Dense and Sparse searches, then fuse normalized scores."""
+        alpha: float = 0.5,
+    ) -> list[RetrievedChunk]:        
         rbac_conditions = [
             models.FieldCondition(
                 key="rbac.allowed_roles",
@@ -162,8 +151,7 @@ class VectorStore:
             )
 
         query_filter = models.Filter(must=rbac_conditions) if rbac_conditions else None
-
-        # 1. Execute Dense Search
+        
         dense_results = await self.client.search(
             collection_name=COLLECTION_NAME,
             query_vector=("dense", query_vector),
@@ -171,8 +159,7 @@ class VectorStore:
             limit=top_k * 2, # Fetch wider net for better fusion overlap
             with_payload=True,
         )
-
-        # 2. Execute Sparse Search (BM25)
+        
         sparse_results = await self.client.search(
             collection_name=COLLECTION_NAME,
             query_vector=("bm25", models.SparseVector(
@@ -183,24 +170,21 @@ class VectorStore:
             limit=top_k * 2,
             with_payload=True,
         )
-
-        # 3. Min-Max Normalization helper (Relative Score Fusion)
+        
         def normalize(results: list[models.ScoredPoint]) -> dict[str, tuple[float, models.ScoredPoint]]:
             if not results: return {}
             scores = [r.score for r in results]
             min_score, max_score = min(scores), max(scores)
             
             normalized = {}
-            for r in results:
-                # Handle edge case where all retrieved scores are identical
+            for r in results:                
                 norm_val = (r.score - min_score) / (max_score - min_score) if max_score > min_score else 1.0
                 normalized[str(r.id)] = (norm_val, r)
             return normalized
 
         dense_norm = normalize(dense_results)
         sparse_norm = normalize(sparse_results)
-
-        # 4. Math Fusion: α * score_dense + (1 − α) * score_sparse
+        
         fused_scores = {}
         all_ids = set(dense_norm.keys()).union(sparse_norm.keys())
 
@@ -212,18 +196,13 @@ class VectorStore:
             point_data = d_point if d_point else s_point
             
             fused_scores[pid] = (final_score, point_data)
-
-        # Sort by fused score descending
+        
         ranked_results = sorted(fused_scores.values(), key=lambda x: x[0], reverse=True)
         top_results = ranked_results[:top_k]
 
         return [_to_retrieved_chunk(pt, score) for score, pt in top_results]
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
-# Ensure the helper accepts the new fused score
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
 def _to_retrieved_chunk(point: models.ScoredPoint, custom_score: float | None = None) -> RetrievedChunk:
     from app.models.schemas import ChunkType, RBACMetadata

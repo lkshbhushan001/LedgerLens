@@ -5,7 +5,6 @@ from fastapi import HTTPException, status
 
 logger = logging.getLogger(__name__)
 
-# Heuristics for adversarial prompt injection / jailbreaks
 INJECTION_PATTERNS = [
     r"(?i)ignore\s+(all\s+)?(previous\s+)?instructions",
     r"(?i)bypass\s+restrictions",
@@ -23,8 +22,7 @@ PII_PATTERNS = {
     "PHONE": r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b"
 }
 
-def check_input_guardrails(query: str) -> None:
-    """Evaluates the incoming query against known prompt injection heuristics."""
+def check_input_guardrails(query: str) -> None:    
     for pattern in INJECTION_PATTERNS:
         if re.search(pattern, query):
             logger.warning("Prompt injection detected in query: %s", query)
@@ -33,8 +31,7 @@ def check_input_guardrails(query: str) -> None:
                 detail="Query violates security and acceptable use policies."
             )
 
-def apply_output_guardrails(text: str) -> str:
-    """Redacts sensitive PII from the outgoing synthesized response."""
+def apply_output_guardrails(text: str) -> str:    
     safe_text = text
     for pii_type, pattern in PII_PATTERNS.items():
         safe_text = re.sub(pattern, f"[REDACTED {pii_type}]", safe_text)
