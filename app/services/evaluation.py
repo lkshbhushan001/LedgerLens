@@ -10,8 +10,8 @@ from app.core.config import settings
 from app.models.schemas import EvaluationResult
 
 from ragas import evaluate
-from ragas.llms import LangchainLLMWrapper
-from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.llms.base import LangchainLLMWrapper
+from ragas.embeddings.base import LangchainEmbeddingsWrapper
 from ragas.metrics import (
         answer_relevancy,
         context_precision,
@@ -29,8 +29,7 @@ def _get_evaluator_llm() -> LangchainLLMWrapper:
     )
     return LangchainLLMWrapper(langchain_llm)
 
-def _get_evaluator_embeddings() -> LangchainEmbeddingsWrapper:
-    """Configure the local embedding model for Answer Relevancy checks."""
+def _get_evaluator_embeddings() -> LangchainEmbeddingsWrapper:    
     langchain_embeddings = HuggingFaceEmbeddings(
         model_name=settings.EMBEDDING_MODEL,
         model_kwargs={"device": settings.EMBEDDING_DEVICE},
